@@ -15,6 +15,9 @@ export interface ImageVersion {
     tags?: string[]
     description?: string
     title?: string
+    originalFileName?: string
+    fileSize?: number
+    uploadTimestamp?: string
     aiCheckResult?: {
       isAI: boolean
       confidence: number

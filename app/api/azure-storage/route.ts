@@ -10,6 +10,22 @@ export async function GET(request: NextRequest) {
     const azureStorage = getAzureStorageService()
 
     switch (action) {
+      case 'test':
+        // Test Azure Storage connection
+        const testResult = await azureStorage.testConnection()
+        return NextResponse.json(testResult)
+      
+      case 'config':
+        // Return configuration status (without sensitive data)
+        const isConfigured = azureStorage.isAzureConfigured()
+        return NextResponse.json({ 
+          configured: isConfigured,
+          hasAccount: !!process.env.AZURE_STORAGE_ACCOUNT_NAME,
+          hasContainer: !!process.env.AZURE_STORAGE_CONTAINER,
+          hasKey: !!process.env.AZURE_STORAGE_ACCOUNT_KEY,
+          hasConnectionString: !!process.env.AZURE_STORAGE_CONNECTION_STRING
+        })
+      
       case 'list':
         const images = await azureStorage.listImages(prefix || undefined)
         return NextResponse.json({ images })

@@ -4,6 +4,7 @@ export interface AzureStorageConfig {
   account: string
   container: string
   accountKey: string
+  connectionString?: string
 }
 
 export class AzureStorageService {
@@ -16,20 +17,99 @@ export class AzureStorageService {
     this.config = {
       account: process.env.AZURE_STORAGE_ACCOUNT_NAME || '',
       container: process.env.AZURE_STORAGE_CONTAINER || '',
-      accountKey: process.env.AZURE_STORAGE_ACCOUNT_KEY || ''
+      accountKey: process.env.AZURE_STORAGE_ACCOUNT_KEY || '',
+      connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING || ''
     }
 
-    // Check if Azure Storage is configured
-    if (!this.config.account || !this.config.container || !this.config.accountKey) {
-      console.warn('Azure Storage configuration is incomplete. Images will be stored locally only.')
+    // Enhanced configuration validation
+    this.validateConfiguration()
+  }
+
+  private validateConfiguration() {
+    // Check if we have a connection string first (preferred method)
+    if (this.config.connectionString) {
+      try {
+        this.isConfigured = true
+        this.blobServiceClient = BlobServiceClient.fromConnectionString(this.config.connectionString)
+        this.containerClient = this.blobServiceClient.getContainerClient(this.config.container)
+        
+        console.log(`Azure Storage configured successfully using connection string for container: ${this.config.container}`)
+        return
+      } catch (error) {
+        console.error('Failed to initialize Azure Storage client with connection string:', error)
+        this.isConfigured = false
+        return
+      }
+    }
+
+    // Fallback to individual credentials
+    const missingVars = []
+    
+    if (!this.config.account) missingVars.push('AZURE_STORAGE_ACCOUNT_NAME')
+    if (!this.config.container) missingVars.push('AZURE_STORAGE_CONTAINER')
+    if (!this.config.accountKey) missingVars.push('AZURE_STORAGE_ACCOUNT_KEY')
+
+    if (missingVars.length > 0) {
+      console.warn(`Azure Storage configuration is incomplete. Missing: ${missingVars.join(', ')}`)
+      console.warn('Images will be stored locally only.')
       this.isConfigured = false
       return
     }
 
-    this.isConfigured = true
-    const connectionString = `DefaultEndpointsProtocol=https;AccountName=${this.config.account};AccountKey=${this.config.accountKey};EndpointSuffix=core.windows.net`
-    this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString)
-    this.containerClient = this.blobServiceClient.getContainerClient(this.config.container)
+    // Validate account name format
+    if (!/^[a-z0-9]{3,24}$/.test(this.config.account)) {
+      console.error('Invalid Azure Storage account name. Must be 3-24 characters, lowercase letters and numbers only.')
+      this.isConfigured = false
+      return
+    }
+
+    // Validate account key format (only if not using connection string)
+    if (!/^[A-Za-z0-9+/]{88}==$/.test(this.config.accountKey)) {
+      console.error('Invalid Azure Storage account key format.')
+      this.isConfigured = false
+      return
+    }
+
+    try {
+      this.isConfigured = true
+      const connectionString = `DefaultEndpointsProtocol=https;AccountName=${this.config.account};AccountKey=${this.config.accountKey};EndpointSuffix=core.windows.net`
+      this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString)
+      this.containerClient = this.blobServiceClient.getContainerClient(this.config.container)
+      
+      console.log(`Azure Storage configured successfully for account: ${this.config.account}, container: ${this.config.container}`)
+    } catch (error) {
+      console.error('Failed to initialize Azure Storage client:', error)
+      this.isConfigured = false
+    }
+  }
+
+  /**
+   * Test Azure Storage connectivity
+   */
+  async testConnection(): Promise<{ success: boolean; error?: string }> {
+    if (!this.isConfigured) {
+      return { success: false, error: 'Azure Storage is not configured' }
+    }
+
+    try {
+      // Test container access
+      const properties = await this.containerClient!.getProperties()
+      console.log('Azure Storage connection test successful')
+      return { success: true }
+    } catch (error: any) {
+      console.error('Azure Storage connection test failed:', error)
+      
+      // Provide specific error messages
+      if (error.statusCode === 404) {
+        return { success: false, error: 'Container not found. Please check the container name.' }
+      } else if (error.statusCode === 403) {
+        return { success: false, error: 'Access denied. Please check your account key and permissions.' }
+      } else if (error.statusCode === 400) {
+        return { success: false, error: 'Invalid request. Please check your account name and key.' }
+      } else {
+        return { success: false, error: `Connection failed: ${error.message}` }
+      }
+    }
   }
 
   /**
@@ -41,25 +121,40 @@ export class AzureStorageService {
     }
 
     try {
+      console.log(`Attempting to upload image: ${filename}`)
+      
       // Convert base64 to buffer
       const buffer = Buffer.from(imageData, 'base64')
+      console.log(`Image buffer size: ${buffer.length} bytes`)
       
       // Create blob client
       const blobClient = this.containerClient!.getBlockBlobClient(filename)
       
       // Upload with metadata
-      await blobClient.upload(buffer, buffer.length, {
+      const uploadResult = await blobClient.upload(buffer, buffer.length, {
         blobHTTPHeaders: {
           blobContentType: 'image/jpeg'
         },
         metadata
       })
 
+      console.log(`Upload successful: ${filename}, ETag: ${uploadResult.etag}`)
+      
       // Return the blob URL
       return blobClient.url
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading to Azure Blob Storage:', error)
-      throw new Error('Failed to upload image to Azure Blob Storage')
+      
+      // Provide specific error messages
+      if (error.statusCode === 404) {
+        throw new Error('Container not found. Please check the container name.')
+      } else if (error.statusCode === 403) {
+        throw new Error('Access denied. Please check your account key and permissions.')
+      } else if (error.statusCode === 400) {
+        throw new Error('Invalid request. Please check your account name and key.')
+      } else {
+        throw new Error(`Failed to upload image to Azure Blob Storage: ${error.message}`)
+      }
     }
   }
 
@@ -72,28 +167,49 @@ export class AzureStorageService {
     }
 
     try {
+      console.log(`Attempting to upload blob URL: ${filename}`)
+      
       // Fetch the blob data
       const response = await fetch(blobUrl)
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch blob URL: ${response.status} ${response.statusText}`)
+      }
+      
       const blob = await response.blob()
       const arrayBuffer = await blob.arrayBuffer()
       const buffer = Buffer.from(arrayBuffer)
+      
+      console.log(`Blob buffer size: ${buffer.length} bytes, type: ${blob.type}`)
       
       // Create blob client
       const blobClient = this.containerClient!.getBlockBlobClient(filename)
       
       // Upload with metadata
-      await blobClient.upload(buffer, buffer.length, {
+      const uploadResult = await blobClient.upload(buffer, buffer.length, {
         blobHTTPHeaders: {
           blobContentType: blob.type || 'image/jpeg'
         },
         metadata
       })
 
+      console.log(`Upload successful: ${filename}, ETag: ${uploadResult.etag}`)
+      
       // Return the blob URL
       return blobClient.url
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading blob URL to Azure Blob Storage:', error)
-      throw new Error('Failed to upload image to Azure Blob Storage')
+      
+      // Provide specific error messages
+      if (error.statusCode === 404) {
+        throw new Error('Container not found. Please check the container name.')
+      } else if (error.statusCode === 403) {
+        throw new Error('Access denied. Please check your account key and permissions.')
+      } else if (error.statusCode === 400) {
+        throw new Error('Invalid request. Please check your account name and key.')
+      } else {
+        throw new Error(`Failed to upload image to Azure Blob Storage: ${error.message}`)
+      }
     }
   }
 
