@@ -18,22 +18,31 @@ async function testAzureStorage() {
   const containerName = process.env.AZURE_STORAGE_CONTAINER;
   const accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY;
   const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+  const sasToken = process.env.AZURE_STORAGE_SAS_TOKEN;
 
   console.log('📋 Environment Variables Check:');
+  console.log(`  SAS Token: ${sasToken ? '✅ Set' : '❌ Missing'}`);
   console.log(`  Connection String: ${connectionString ? '✅ Set' : '❌ Missing'}`);
   console.log(`  Account Name: ${accountName ? '✅ Set' : '❌ Missing'}`);
   console.log(`  Container: ${containerName ? '✅ Set' : '❌ Missing'}`);
   console.log(`  Account Key: ${accountKey ? '✅ Set' : '❌ Missing'}`);
 
-  // Check if we have either connection string or individual credentials
-  if (!connectionString && (!accountName || !containerName || !accountKey)) {
+  // Check if we have any valid configuration
+  const hasSasConfig = sasToken && accountName && containerName;
+  const hasConnectionString = connectionString && containerName;
+  const hasIndividualCredentials = accountName && containerName && accountKey;
+
+  if (!hasSasConfig && !hasConnectionString && !hasIndividualCredentials) {
     console.log('\n❌ Missing environment variables. Please check your .env.local file.');
-    console.log('   You need either AZURE_STORAGE_CONNECTION_STRING or all three: AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_CONTAINER, AZURE_STORAGE_ACCOUNT_KEY');
+    console.log('   You need one of these configurations:');
+    console.log('   1. SAS Token: AZURE_STORAGE_SAS_TOKEN + AZURE_STORAGE_ACCOUNT_NAME + AZURE_STORAGE_CONTAINER');
+    console.log('   2. Connection String: AZURE_STORAGE_CONNECTION_STRING + AZURE_STORAGE_CONTAINER');
+    console.log('   3. Individual Credentials: AZURE_STORAGE_ACCOUNT_NAME + AZURE_STORAGE_CONTAINER + AZURE_STORAGE_ACCOUNT_KEY');
     return;
   }
 
-  // Validate individual credentials only if not using connection string
-  if (!connectionString) {
+  // Validate individual credentials only if not using SAS or connection string
+  if (!sasToken && !connectionString) {
     // Validate account name format
     if (!/^[a-z0-9]{3,24}$/.test(accountName)) {
       console.log('\n❌ Invalid account name format. Must be 3-24 characters, lowercase letters and numbers only.');
@@ -54,9 +63,16 @@ async function testAzureStorage() {
     console.log('\n🔗 Testing Azure Storage Connection...');
     
     let blobServiceClient;
-    if (connectionString) {
+    if (sasToken && accountName) {
+      console.log('🔐 Using SAS token for connection');
+      blobServiceClient = new BlobServiceClient(
+        `https://${accountName}.blob.core.windows.net?${sasToken}`
+      );
+    } else if (connectionString) {
+      console.log('🔗 Using connection string for connection');
       blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
     } else {
+      console.log('🔑 Using account key for connection');
       const constructedConnectionString = `DefaultEndpointsProtocol=https;AccountName=${accountName};AccountKey=${accountKey};EndpointSuffix=core.windows.net`;
       blobServiceClient = BlobServiceClient.fromConnectionString(constructedConnectionString);
     }
@@ -74,7 +90,7 @@ async function testAzureStorage() {
     const testContent = 'This is a test file for Azure Storage connectivity.';
     const blockBlobClient = containerClient.getBlockBlobClient(testBlobName);
     
-    await blockBlobClient.upload(testContent, testContent.length, {
+    await blockBlobClient.uploadData(Buffer.from(testContent), {
       blobHTTPHeaders: { blobContentType: 'text/plain' }
     });
     console.log(`✅ Successfully uploaded test file: ${testBlobName}`);

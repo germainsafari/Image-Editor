@@ -65,11 +65,13 @@ export default function ContextEditPage() {
   }
 
   // Redirect to home if no current version
-  if (!currentVersion) {
-    // Use useEffect to avoid setState during render
-    useEffect(() => {
+  useEffect(() => {
+    if (!currentVersion) {
       router.push('/')
-    }, [router])
+    }
+  }, [currentVersion, router])
+
+  if (!currentVersion) {
     return null
   }
 

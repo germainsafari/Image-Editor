@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
           hasAccount: !!process.env.AZURE_STORAGE_ACCOUNT_NAME,
           hasContainer: !!process.env.AZURE_STORAGE_CONTAINER,
           hasKey: !!process.env.AZURE_STORAGE_ACCOUNT_KEY,
-          hasConnectionString: !!process.env.AZURE_STORAGE_CONNECTION_STRING
+          hasConnectionString: !!process.env.AZURE_STORAGE_CONNECTION_STRING,
+          hasSasToken: !!process.env.AZURE_STORAGE_SAS_TOKEN
         })
       
       case 'list':
