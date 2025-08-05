@@ -1,0 +1,195 @@
+Below is a high‐level, end-to-end architecture and page-by-page breakdown for your multi-stage ABB Image Editor. It’s built to enforce brand consistency, wire together AI services (AI-check, Flux Kontext editing, color, crop, tagging), and provide a seamless flow of image versions and metadata.
+
+---
+
+## 1. Overall Architecture
+
+```text
+┌────────────┐      ┌───────────────────┐      ┌──────────────┐
+│   Frontend │◀────▶│  Orchestration    │◀────▶│ Storage &    │
+│ (Next.js)  │ REST │  Layer / API GW   │      │ Metadata DB  │
+└────────────┘      └───────────────────┘      └──────────────┘
+       │                   │      │                   │
+       │                   │      │                   │
+       ▼                   ▼      ▼                   ▼
+┌────────────┐     ┌───────────────┐      ┌──────────────┐
+│ AI-Check   │     │ Flux Kontext  │      │ Crop &       │
+│ Function   │     │ Edit Service  │      │ Resize Svc   │
+└────────────┘     └───────────────┘      └──────────────┘
+       │                   │      │
+       │                   │      │
+       ▼                   ▼      ▼
+┌────────────┐     ┌───────────────┐ 
+│ Color      │     │ Tagging &     │
+│ Adjustment │     │ Description   │
+│ Service    │     │ Service       │
+└────────────┘     └───────────────┘ 
+```
+
+* **Frontend (Next.js+React)**
+
+  * Page routing for each stage
+  * State management via React Context or Redux to hold current image version ID, metadata, history stack
+  * Upload & download handlers, progress indicators, undo/redo
+
+* **API Gateway / Orchestration Layer**
+
+  * Exposes REST or GraphQL endpoints for each service
+  * Manages version IDs (UUIDs) and ties them to storage references & metadata in the DB
+  * Handles error flows, retries, logging
+
+* **Services (Serverless / Containers)**
+
+  1. **AI-Check Service**
+
+     * Reads file metadata & optionally runs an open-source detector (e.g. [HuggingFace image-forensics models](https://huggingface.co/spaces/akhaliq/image-forensics)).
+     * Returns `{ isAI: boolean, confidence: 0–1 }`.
+
+  2. **Flux Kontext Edit Service**
+
+     * Forwards image + prompt to Flux Kontext API, stores resulting image.
+     * Returns new version ID.
+
+  3. **Color Adjustment Service**
+
+     * Applies brand palette transforms (via CSS filters or small generative model).
+     * Could wrap an AI color-transfer model fine-tuned on ABB brand colors.
+
+  4. **Crop & Resize Service**
+
+     * Offers freeform and preset aspect ratios (1:1, 3:4, 16:9, etc.).
+     * Returns cropped image version.
+
+  5. **Tagging & Description Service**
+
+     * Runs an image-to-text model (e.g. Azure Computer Vision, AWS Rekognition, or OpenAI’s vision endpoint)
+     * Generates title, description, and tag suggestions; persists to metadata DB.
+
+* **Storage & Metadata**
+
+  * **Object Storage** (AWS S3 / Azure Blob): stores every image version keyed by a UUID.
+  * **Metadata DB** (Postgres / MongoDB): tracks version chain, timestamps, prompts, AI-check results, crop settings, color settings, and tags.
+  * **Cache** (Redis): for hot image previews, undo/redo stacks.
+
+---
+
+## 2. Page-by-Page Flow
+
+### 2.1. Upload & AI-Check Page
+
+* **URL:** `/upload`
+* **UI:** drag-and-drop or file picker
+* **Action:**
+
+  1. Upload file → API `/api/images/upload` → store original → versionID\_0
+  2. Call `/api/images/{versionID_0}/aicheck` → show spinner + result badge (“AI-Generated” / “Original”)
+* **State:** store versionID\_0 and AI-check result in React Context
+
+---
+
+### 2.2. Flux Kontext Edit Page
+
+* **URL:** `/edit/context`
+* **UI:** large canvas preview, text prompt input, “Generate” button, history thumbnail strip
+* **Action:**
+
+  1. Submit prompt → POST `/api/images/{currentVersion}/flux`
+  2. Receive new versionID\_1 → update context → append to history stack
+* **UX Tips:** show before/after toggle, real-time streaming of edit if supported
+
+---
+
+### 2.3. Color Editing Page
+
+* **URL:** `/edit/colors`
+* **UI:** color swatches (ABB primary, secondary), “Auto‐apply” toggle, manual sliders for hue/saturation/lightness
+* **Action:**
+
+  1. Select palette or auto → PATCH `/api/images/{currentVersion}/color`
+  2. Save new versionID\_2
+* **UX Tips:** preview multiple variations side-by-side; lock brand colors
+
+---
+
+### 2.4. Crop & Resize Page
+
+* **URL:** `/edit/crop`
+* **UI:** drag handles over preview, preset ratio buttons
+* **Action:**
+
+  1. Adjust crop → immediately preview (client‐side canvas)
+  2. Confirm → POST `/api/images/{currentVersion}/crop` → versionID\_3
+* **UX Tips:** grid overlay, live aspect‐ratio locking, undo last crop
+
+---
+
+### 2.5. Tagging & Description Page
+
+* **URL:** `/edit/meta`
+* **UI:** auto-generated title & description area, tag suggestions with checkboxes, manual input fields
+* **Action:**
+
+  1. GET `/api/images/{currentVersion}/metadata` → populate fields
+  2. User edits/adds tags → PUT `/api/images/{currentVersion}/metadata`
+* **UX Tips:** inline editing, save drafts, preview how image will appear in media bank
+
+---
+
+### 2.6. Download & History Panel
+
+* **Persistent Sidebar or Dropdown** on every page
+* **Thumbnails** of each version (click to revert or compare)
+* **Download** current version or entire ZIP of all versions
+
+---
+
+## 3. Version & State Management
+
+* **Version Chain:**
+
+  ```jsonc
+  {
+    "imageId": "1234",
+    "versions": [
+      { "id":"v0-orig", "type":"upload", timestamp, metadata:{…} },
+      { "id":"v1-flux", "type":"flux", prompt:"Remove background", parent:"v0-orig" },
+      { "id":"v2-color", "type":"color", settings:{…}, parent:"v1-flux"},
+      …
+    ]
+  }
+  ```
+* **Undo/Redo:** traverse `versions` array, update `currentVersion` pointer.
+* **Caching:** store small JPEG thumbnails in Redis for instant display.
+
+---
+
+## 4. Tech Stack Recommendations
+
+| Layer            | Technology                                                          |
+| ---------------- | ------------------------------------------------------------------- |
+| Frontend         | Next.js + React, shadcn/ui (Tailwind), Zustand/Redux                |
+| Styling & UI     | Tailwind CSS, Radix UI, Framer Motion                               |
+| Orchestration    | AWS API Gateway → Lambda or Azure API Apps                          |
+| Services         | Node.js or Python Lambdas                                           |
+| Object Storage   | AWS S3 or Azure Blob                                                |
+| DB / Metadata    | PostgreSQL (Supabase) or MongoDB Atlas                              |
+| Cache            | Redis (Elasticache)                                                 |
+| AI Models / APIs | OpenAI Vision, HuggingFace, Flux Kontext API, Azure Computer Vision |
+| Monitoring & CI  | GitHub Actions, Sentry, Datadog                                     |
+
+---
+
+## 5. Next Steps & Tips
+
+1. **MVP:** implement upload, AI-check, Flux Kontext integration, and basic history.
+2. **Iterate:** add color, crop, tagging modules one at a time, reusing the versioning pattern.
+3. **UX Testing:** validate with internal users to ensure stage transitions feel seamless.
+4. **Performance:** lazy-load images, use CDN in front of object storage, batch processing for AI calls.
+5. **Brand Guard:** embed rules in Color Service to reject out-of-palette transforms.
+
+With this modular, versioned architecture and clear page flow, you’ll be able to roll out a robust ABB Image Editor that’s both powerful and brand-safe—while keeping each function cleanly separable and easily maintainable.
+---
+description:
+globs:
+alwaysApply: false
+---
