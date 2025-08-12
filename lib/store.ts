@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { getAzureStorageService } from './azure-storage'
 
 export interface ImageVersion {
   id: string
@@ -71,32 +70,44 @@ export const useImageStore = create<ImageEditorState>()(
             timestamp: new Date(),
           }
 
-          // Upload to Azure Blob Storage if we have a blob URL and Azure is configured
+          // Upload to Azure Blob Storage if we have a blob URL
           if (newVersion.imageUrl.startsWith('blob:')) {
             try {
-              const azureStorage = getAzureStorageService()
+              // Convert blob URL to base64 data URL
+              const response = await fetch(newVersion.imageUrl)
+              const blob = await response.blob()
+              const reader = new FileReader()
               
-              // Only attempt upload if Azure is configured
-              if (azureStorage.isAzureConfigured()) {
-                const filename = azureStorage.generateFilename(newVersion.id, newVersion.type)
-                
-                // Upload the blob URL to Azure
-                const azureUrl = await azureStorage.uploadBlobUrl(
-                  newVersion.imageUrl,
-                  filename,
-                  {
-                    versionId: newVersion.id,
-                    type: newVersion.type,
-                    parent: newVersion.parent || '',
-                    prompt: newVersion.metadata?.prompt || '',
-                    timestamp: newVersion.timestamp.toISOString(),
-                    ...newVersion.metadata?.azureMetadata
-                  }
-                )
+              const base64Promise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => resolve(reader.result as string)
+                reader.onerror = reject
+                reader.readAsDataURL(blob)
+              })
+              
+              const base64DataUrl = await base64Promise
+              
+              // Call the API route to upload to Azure
+              const uploadResponse = await fetch('/api/upload-version', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  imageUrl: base64DataUrl,
+                  versionId: newVersion.id,
+                  type: newVersion.type,
+                  parent: newVersion.parent || '',
+                  prompt: newVersion.metadata?.prompt || '',
+                  metadata: newVersion.metadata?.azureMetadata || {}
+                })
+              })
+
+              if (uploadResponse.ok) {
+                const result = await uploadResponse.json()
                 
                 // Update the version with Azure URL and path
-                newVersion.imageUrl = azureUrl
-                newVersion.azureBlobPath = filename
+                newVersion.imageUrl = result.azureUrl
+                newVersion.azureBlobPath = result.azureBlobPath
                 newVersion.metadata = {
                   ...newVersion.metadata,
                   azureMetadata: {
@@ -108,11 +119,14 @@ export const useImageStore = create<ImageEditorState>()(
                     ...newVersion.metadata?.azureMetadata
                   }
                 }
+                
+                console.log('✅ Image uploaded to Azure successfully:', result.message)
               } else {
-                console.log('Azure Storage not configured, keeping image in local storage')
+                const errorData = await uploadResponse.json()
+                console.warn('⚠️ Azure upload failed, keeping image in local storage:', errorData.error)
               }
             } catch (error) {
-              console.error('Failed to upload to Azure Blob Storage:', error)
+              console.error('❌ Failed to upload to Azure Blob Storage:', error)
               // Continue with local blob URL if Azure upload fails
             }
           }
@@ -155,7 +169,6 @@ export const useImageStore = create<ImageEditorState>()(
 
       loadVersionFromAzure: async (versionId: string) => {
         try {
-          const azureStorage = getAzureStorageService()
           const versions = get().versions
           const version = versions.find(v => v.id === versionId)
           
@@ -163,25 +176,26 @@ export const useImageStore = create<ImageEditorState>()(
             return null
           }
 
-          // Check if Azure is configured before attempting download
-          if (!azureStorage.isAzureConfigured()) {
-            console.warn('Azure Storage not configured, cannot load version from Azure')
+          // Call the API route to download from Azure
+          const response = await fetch(`/api/azure-storage?action=download&filename=${encodeURIComponent(version.azureBlobPath)}`)
+          
+          if (response.ok) {
+            const imageData = await response.text()
+            
+            // Create a new version with the downloaded image
+            const downloadedVersion: ImageVersion = {
+              ...version,
+              imageUrl: imageData,
+              timestamp: new Date()
+            }
+
+            return downloadedVersion
+          } else {
+            console.warn('⚠️ Failed to load version from Azure:', response.statusText)
             return null
           }
-
-          // Download from Azure Blob Storage
-          const imageData = await azureStorage.downloadImage(version.azureBlobPath)
-          
-          // Create a new version with the downloaded image
-          const downloadedVersion: ImageVersion = {
-            ...version,
-            imageUrl: imageData,
-            timestamp: new Date()
-          }
-
-          return downloadedVersion
         } catch (error) {
-          console.error('Error loading version from Azure:', error)
+          console.error('❌ Error loading version from Azure:', error)
           return null
         }
       },
@@ -192,10 +206,19 @@ export const useImageStore = create<ImageEditorState>()(
           const version = versions.find(v => v.id === versionId)
           
           if (version?.azureBlobPath) {
-            const azureStorage = getAzureStorageService()
-            // Only attempt to delete from Azure if it's configured
-            if (azureStorage.isAzureConfigured()) {
-              await azureStorage.deleteImage(version.azureBlobPath)
+            // Call the API route to delete from Azure
+            try {
+              const response = await fetch(`/api/azure-storage?action=delete&filename=${encodeURIComponent(version.azureBlobPath)}`, {
+                method: 'DELETE'
+              })
+              
+              if (response.ok) {
+                console.log('✅ Image deleted from Azure successfully')
+              } else {
+                console.warn('⚠️ Failed to delete image from Azure:', response.statusText)
+              }
+            } catch (error) {
+              console.warn('⚠️ Failed to delete image from Azure:', error)
             }
           }
 
