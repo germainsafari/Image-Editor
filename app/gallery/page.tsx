@@ -33,7 +33,8 @@ export default function GalleryPage() {
 
   const handleDownload = async (imageUrl: string, version: any) => {
     try {
-      const filename = `image_${version.type}_${new Date(version.timestamp).toISOString().split('T')[0]}.jpg`
+      const timestamp = version.timestamp instanceof Date ? version.timestamp : new Date(version.timestamp)
+      const filename = `image_${version.type}_${timestamp.toISOString().split('T')[0]}.jpg`
       await downloadImage(imageUrl, filename)
     } catch (error) {
       console.error('Download failed:', error)
@@ -231,7 +232,7 @@ export default function GalleryPage() {
                   
                   <div className="flex items-center text-xs text-gray-500 mb-2">
                     <Calendar size={12} className="mr-1" />
-                    {formatDate(version.timestamp.toISOString())}
+                    {formatDate(version.timestamp instanceof Date ? version.timestamp.toISOString() : new Date(version.timestamp).toISOString())}
                   </div>
 
                   {version.metadata?.tags && version.metadata.tags.length > 0 && (

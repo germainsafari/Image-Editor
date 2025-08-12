@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Tag, Save, Sparkles, Eye, FileText, Hash } from 'lucide-react'
 import EditorLayout from '@/components/EditorLayout'
-import TaggingGuidelines from '@/components/TaggingGuidelines'
+
 import { useImageStore } from '@/lib/store'
 import { generateImageDescription } from '@/lib/utils'
 
@@ -489,10 +489,7 @@ export default function MetaEditPage() {
           </button>
         </div>
 
-        {/* Tagging Guidelines Component */}
-        <div className="mt-8">
-          <TaggingGuidelines />
-        </div>
+
 
         {/* Media Bank Preview */}
         <div className="mt-8 p-4 bg-gray-50 rounded-lg border border-gray-200">

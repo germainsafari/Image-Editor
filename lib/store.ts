@@ -248,9 +248,21 @@ export const useImageStore = create<ImageEditorState>()(
         if (state) {
           state.setHydrated(true)
           
-          // Clean up any invalid blob URLs in stored versions
+          // Convert timestamp strings back to Date objects and clean up invalid blob URLs
           const versions = state.versions
-          const hasInvalidBlobUrls = versions.some(v => v.imageUrl.startsWith('blob:'))
+          let hasInvalidBlobUrls = false
+          
+          versions.forEach(version => {
+            // Convert timestamp string back to Date object
+            if (typeof version.timestamp === 'string') {
+              version.timestamp = new Date(version.timestamp)
+            }
+            
+            // Check for invalid blob URLs
+            if (version.imageUrl.startsWith('blob:')) {
+              hasInvalidBlobUrls = true
+            }
+          })
           
           if (hasInvalidBlobUrls) {
             console.warn('Found invalid blob URLs in stored versions, clearing store')

@@ -39,7 +39,8 @@ export default function VersionManager({ className }: VersionManagerProps) {
 
   const handleVersionDownload = (version: any) => {
     try {
-      const filename = `version-${version.type}-${new Date(version.timestamp).toISOString().split('T')[0]}.jpg`
+      const timestamp = version.timestamp instanceof Date ? version.timestamp : new Date(version.timestamp)
+      const filename = `version-${version.type}-${timestamp.toISOString().split('T')[0]}.jpg`
       downloadImage(version.imageUrl, filename)
     } catch (error) {
       console.error('Error downloading version:', error)
@@ -103,7 +104,7 @@ export default function VersionManager({ className }: VersionManagerProps) {
                     <span>{getVersionTypeLabel(version.type)}</span>
                   </div>
                   <span className="text-xs opacity-75">
-                    {new Date(version.timestamp).toLocaleTimeString()}
+                    {(version.timestamp instanceof Date ? version.timestamp : new Date(version.timestamp)).toLocaleTimeString()}
                   </span>
                 </div>
               </div>
