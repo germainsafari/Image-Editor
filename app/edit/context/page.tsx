@@ -127,7 +127,7 @@ export default function ContextEditPage() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g., 'Make the background more professional', 'Add a modern office setting', 'Change the lighting to be warmer'"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-abb-red focus:border-abb-red"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-abb-red focus:border-abb-red text-gray-900"
             rows={3}
           />
         </div>

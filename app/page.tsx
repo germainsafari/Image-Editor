@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 
 export default function Home() {
   const router = useRouter()
-  const { addVersion, setProcessing, setError, getCurrentVersion, versions, isHydrated } = useImageStore()
+  const { addVersion, setProcessing, setError, getCurrentVersion, versions, isHydrated, error, isProcessing } = useImageStore()
   const [dragActive, setDragActive] = useState(false)
   const currentVersion = getCurrentVersion()
 
@@ -68,7 +68,14 @@ export default function Home() {
     if (e.type === "dragenter" || e.type === "dragover") {
       setDragActive(true)
     } else if (e.type === "dragleave") {
-      setDragActive(false)
+      // Only set dragActive to false if we're leaving the drop zone entirely
+      const rect = e.currentTarget.getBoundingClientRect()
+      const x = e.clientX
+      const y = e.clientY
+      
+      if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) {
+        setDragActive(false)
+      }
     }
   }
 
@@ -78,13 +85,29 @@ export default function Home() {
     setDragActive(false)
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileUpload(e.dataTransfer.files[0])
+      const file = e.dataTransfer.files[0]
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please drop an image file (JPG, PNG, GIF, WebP)')
+        return
+      }
+      
+      handleFileUpload(file)
     }
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      handleFileUpload(e.target.files[0])
+      const file = e.target.files[0]
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file (JPG, PNG, GIF, WebP)')
+        return
+      }
+      
+      handleFileUpload(file)
     }
   }
 
@@ -96,7 +119,12 @@ export default function Home() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div 
+      className="min-h-screen bg-gray-50"
+      onDragEnter={handleDrag}
+      onDragLeave={handleDrag}
+      onDragOver={handleDrag}
+    >
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -152,17 +180,46 @@ export default function Home() {
 
           {/* Main Content */}
           <div className="flex-1">
-            <div className="bg-white rounded-lg shadow-sm border-2 border-dashed border-gray-300 p-12">
+            <div 
+              className={`bg-white rounded-lg shadow-sm border-2 border-dashed p-12 transition-all duration-200 ${
+                dragActive 
+                  ? 'border-abb-red bg-red-50 scale-[1.02] shadow-lg' 
+                  : 'border-gray-300'
+              }`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              role="button"
+              tabIndex={0}
+              aria-label="Drag and drop image upload area"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  document.getElementById('file-upload')?.click()
+                }
+              }}
+            >
               <div className="text-center">
                 <Upload 
                   size={48} 
-                  className="mx-auto text-gray-400 mb-4" 
+                  className={`mx-auto mb-4 transition-all duration-200 ${
+                    dragActive 
+                      ? 'text-abb-red scale-110' 
+                      : 'text-gray-400'
+                  }`}
                 />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Click or drag file to this area to upload
+                  {dragActive ? 'Drop your image here!' : 'Click or drag file to this area to upload'}
                 </h3>
                 <p className="text-sm text-gray-500 mb-6">
-                  Support for a single or bulk upload
+                  {dragActive ? 'Release to upload your image' : 'Support for a single image upload'}
+                </p>
+                <p className="text-xs text-gray-400 mb-6">
+                  Supported formats: JPG, PNG, GIF, WebP
+                </p>
+                <p className="text-xs text-gray-400 mb-6">
+                  💡 Tip: You can also press Enter or Space to browse files
                 </p>
                 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -190,6 +247,29 @@ export default function Home() {
                     </button>
                   )}
                 </div>
+                
+                {/* Loading Indicator */}
+                {isProcessing && (
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
+                      <p className="text-sm text-blue-800">Processing image...</p>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Error Display */}
+                {error && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-sm text-red-800">{error}</p>
+                    <button
+                      onClick={() => setError(null)}
+                      className="mt-2 text-xs text-red-600 hover:text-red-800 underline"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

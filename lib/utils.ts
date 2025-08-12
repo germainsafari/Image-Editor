@@ -444,20 +444,35 @@ export function cropImage(
     img.crossOrigin = 'anonymous'
     
     img.onload = () => {
-      // Calculate actual pixel values from percentages
-      const scaleX = img.naturalWidth / imageDimensions.width
-      const scaleY = img.naturalHeight / imageDimensions.height
-      
+      // ReactCrop provides pixel coordinates, not percentages
+      // The crop object already contains the correct pixel values
       const pixelCrop = {
-        x: Math.round(crop.x * scaleX),
-        y: Math.round(crop.y * scaleY),
-        width: Math.round(crop.width * scaleX),
-        height: Math.round(crop.height * scaleY)
+        x: Math.round(crop.x),
+        y: Math.round(crop.y),
+        width: Math.round(crop.width),
+        height: Math.round(crop.height)
+      }
+
+      // Validate crop dimensions
+      if (pixelCrop.width <= 0 || pixelCrop.height <= 0) {
+        reject(new Error('Invalid crop dimensions'))
+        return
+      }
+
+      if (pixelCrop.x < 0 || pixelCrop.y < 0 || 
+          pixelCrop.x + pixelCrop.width > img.naturalWidth || 
+          pixelCrop.y + pixelCrop.height > img.naturalHeight) {
+        reject(new Error('Crop area extends beyond image boundaries'))
+        return
       }
 
       // Set canvas size to crop dimensions
       canvas.width = pixelCrop.width
       canvas.height = pixelCrop.height
+
+      // Clear canvas with white background (prevents black areas)
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       // Draw the cropped image
       ctx.drawImage(
@@ -480,7 +495,7 @@ export function cropImage(
         } else {
           reject(new Error('Failed to create cropped image'))
         }
-      }, 'image/jpeg', 0.9)
+      }, 'image/jpeg', 0.95)
     }
 
     img.onerror = (error) => {

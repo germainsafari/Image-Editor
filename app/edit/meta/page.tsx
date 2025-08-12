@@ -180,7 +180,7 @@ export default function MetaEditPage() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Enter a descriptive title for the image..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red text-gray-900"
             maxLength={60}
           />
           <div className="mt-1 text-xs text-gray-500">
@@ -199,7 +199,7 @@ export default function MetaEditPage() {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Enter a detailed description of the image..."
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red resize-none"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red resize-none text-gray-900"
           />
         </div>
 
@@ -247,7 +247,7 @@ export default function MetaEditPage() {
               onChange={(e) => setNewTag(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
               placeholder="Add a new tag..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red text-gray-900"
             />
             <button
               onClick={handleAddTag}
@@ -295,14 +295,14 @@ export default function MetaEditPage() {
               <input
                 type="text"
                 placeholder="e.g., Industrial Automation, Robotics..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red text-gray-900"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Usage Rights
               </label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red">
+              <select className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-abb-red focus:border-abb-red text-gray-900">
                 <option>Internal Use Only</option>
                 <option>Marketing Materials</option>
                 <option>Public Relations</option>
