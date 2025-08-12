@@ -36,21 +36,43 @@ export default function ContextEditPage() {
   }
 
   const handleNext = async () => {
-    if (generatedImageUrl) {
-      // Save the generated image as a new version
-      await addVersion({
-        type: 'flux',
-        imageUrl: generatedImageUrl,
-        parent: currentVersion!.id,
-        metadata: {
-          prompt: prompt
-        }
-      })
+    try {
+      if (generatedImageUrl) {
+        // Save the generated image as a new version
+        await addVersion({
+          type: 'flux',
+          imageUrl: generatedImageUrl,
+          parent: currentVersion!.id,
+          metadata: {
+            prompt: prompt
+          }
+        })
+      }
+      
+      // Navigate to next step
+      router.push('/edit/colors')
+    } catch (error) {
+      console.error('Error saving version:', error)
+      setError('Failed to save image version. Please try again.')
     }
-    
-    // Navigate to next step
-    router.push('/edit/colors')
   }
+
+  // Redirect to home if no current version
+  useEffect(() => {
+    if (!currentVersion && isHydrated) {
+      console.log('ContextEditPage: No current version, redirecting to home')
+      router.push('/')
+    }
+  }, [currentVersion, router, isHydrated])
+
+  // Debug logging
+  useEffect(() => {
+    console.log('ContextEditPage: Component state:', {
+      isHydrated,
+      hasCurrentVersion: !!currentVersion,
+      currentVersionId: currentVersion?.id
+    })
+  }, [isHydrated, currentVersion])
 
   // Show loading state while store is hydrating
   if (!isHydrated) {
@@ -64,14 +86,8 @@ export default function ContextEditPage() {
     )
   }
 
-  // Redirect to home if no current version
-  useEffect(() => {
-    if (!currentVersion) {
-      router.push('/')
-    }
-  }, [currentVersion, router])
-
-  if (!currentVersion) {
+  // Safety check - ensure we have valid data
+  if (!currentVersion || !isHydrated) {
     return null
   }
 
