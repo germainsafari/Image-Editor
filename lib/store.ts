@@ -22,6 +22,13 @@ export interface ImageVersion {
       isAI: boolean
       confidence: number
     }
+    // New naming convention fields
+    divisionName?: string
+    assetType?: string
+    campaignName?: string
+    format?: string
+    ratio?: string
+    customNaming?: string
     azureMetadata?: Record<string, string> // Azure Blob metadata
   }
   parent?: string

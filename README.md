@@ -40,6 +40,10 @@ The application provides a seamless flow where edited images are temporarily sto
 - **Manual Input**: Add custom tags and descriptions
 - **Media Bank Integration**: Preview how images will appear in media bank
 - **Product Identification**: Manual input for specific products AI might miss
+- **ABB Guidelines**: Follows corporate tagging standards and naming conventions
+- **Structured Naming**: Top-down convention: division*_asset type_campaign name_format_ratio
+- **Character Limits**: Description (400 chars), Naming convention (600 chars)
+- **Professional Standards**: ABB-specific terminology and brand voice
 
 ## Technology Stack
 

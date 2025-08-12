@@ -387,7 +387,11 @@ export async function generateImageDescription(imageUrl: string): Promise<{
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        imageUrl: processedImageUrl
+        imageUrl: processedImageUrl,
+        guidelines: {
+          descriptionStyle: "Descriptive but short, clear and searchable. Focus on key visual elements, business context, and industrial applications. Use professional ABB terminology. Maximum 400 characters.",
+          tagStyle: "Include industry-specific terms, product categories, applications, and technical specifications relevant to ABB's business areas (robotics, power grids, industrial automation, etc.)"
+        }
       })
     })
 
@@ -398,18 +402,44 @@ export async function generateImageDescription(imageUrl: string): Promise<{
 
     const result = await response.json()
     
+    // Ensure description follows guidelines
+    let description = result.description || 'No description available.'
+    if (description.length > 400) {
+      description = description.substring(0, 397) + '...'
+    }
+    
+    // Ensure title follows guidelines
+    let title = result.title || 'Untitled Image'
+    if (title.length > 60) {
+      title = title.substring(0, 57) + '...'
+    }
+    
+    // Enhance tags with ABB-specific categories if not present
+    let tags = result.tags || ['image', 'analysis']
+    const abbSpecificTags = [
+      'industrial', 'automation', 'robotics', 'power', 'grid', 'technology', 
+      'manufacturing', 'energy', 'infrastructure', 'equipment', 'solution'
+    ]
+    
+    // Add ABB-specific tags if they're not already present
+    abbSpecificTags.forEach(tag => {
+      if (!tags.includes(tag) && tags.length < 10) {
+        tags.push(tag)
+      }
+    })
+    
     return {
-      title: result.title || 'Untitled Image',
-      description: result.description || 'No description available.',
-      tags: result.tags || ['image', 'analysis']
+      title,
+      description,
+      tags: tags.slice(0, 10) // Limit to 10 tags
     }
   } catch (error) {
     console.error('OpenAI image analysis error:', error)
-    // Fallback response
+    // Fallback response with ABB focus
     return {
-      title: 'Image Analysis',
-      description: 'AI-generated description of the image.',
-      tags: ['image', 'analysis', 'professional']
+      title: 'ABB Industrial Image',
+      description: 'Professional industrial image suitable for ABB applications. Features industrial equipment, technology, or infrastructure relevant to automation and power systems.',
+      tags: ['industrial', 'automation', 'technology', 'ABB', 'professional']
     }
   }
 }
