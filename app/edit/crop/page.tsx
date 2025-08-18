@@ -7,7 +7,7 @@ import ReactCrop, { Crop as CropType, PixelCrop, centerCrop, makeAspectCrop } fr
 import 'react-image-crop/dist/ReactCrop.css'
 import EditorLayout from '@/components/EditorLayout'
 import { useImageStore } from '@/lib/store'
-import { cropImage, getProxiedImageUrl } from '@/lib/utils'
+import { cropImage } from '@/lib/utils'
 
 const aspectRatioPresets = [
   { name: 'Original', ratio: null, icon: '🖼️' },
@@ -38,34 +38,25 @@ export default function CropEditPage() {
   // Initialize crop on image load
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget
-    console.log('Image loaded successfully:', { width, height })
-    
     setImageDimensions({ width, height })
     setImageLoading(false)
     setImageLoadError(false)
     
-    // Create initial crop (80% of image, centered)
-    const initialCrop = centerCrop(
-      makeAspectCrop(
-        {
-          unit: '%',
-          width: 80,
-          height: 80,
-        },
-        16 / 9, // Default aspect ratio
-        width,
-        height
-      ),
-      width,
-      height
-    )
+    // Create initial crop (60% of image, centered) - no aspect ratio constraint for Free mode
+    const initialCrop: CropType = {
+      unit: '%',
+      width: 60,
+      height: 60,
+      x: 20,
+      y: 20,
+    }
     
     setCrop(initialCrop)
     setInitialCrop(initialCrop)
     setHasCropChanged(false)
   }, [])
 
-  // Retry loading image with different strategies
+  // Retry loading image
   const retryImageLoad = useCallback(() => {
     if (!currentVersion) return
     
@@ -86,82 +77,61 @@ export default function CropEditPage() {
 
   // Handle image load error
   const onImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.error('Image failed to load:', e.currentTarget.src)
     setImageLoadError(true)
     setImageLoading(false)
     setError('Failed to load image. Please check the image URL or try refreshing the page.')
   }, [setError])
 
-  // Force image reload if it's stuck loading
+  // Image loading timeout
   useEffect(() => {
     if (imageLoading && currentVersion) {
       const timeout = setTimeout(() => {
         if (imageLoading) {
-          console.log('Image loading timeout, forcing reload')
           retryImageLoad()
         }
-      }, 10000) // 10 second timeout
+      }, 3000)
       
       return () => clearTimeout(timeout)
     }
   }, [imageLoading, currentVersion, retryImageLoad])
 
-  // Force show image after a reasonable timeout to prevent blank page
+  // Force show image after timeout
   useEffect(() => {
     if (imageLoading && currentVersion) {
       const forceShowTimeout = setTimeout(() => {
         if (imageLoading) {
-          console.log('Force showing image to prevent blank page')
           setImageLoading(false)
           setImageLoadError(false)
-          // Create a basic crop area even without dimensions
           if (!crop && currentVersion) {
             const basicCrop: CropType = {
               unit: '%',
-              width: 80,
-              height: 80,
-              x: 10,
-              y: 10,
+              width: 60,
+              height: 60,
+              x: 20,
+              y: 20,
             }
             setCrop(basicCrop)
             setInitialCrop(basicCrop)
           }
         }
-      }, 15000) // 15 second timeout to force show
+      }, 5000)
       
       return () => clearTimeout(forceShowTimeout)
     }
   }, [imageLoading, currentVersion, crop])
 
-  // Reset loading states when currentVersion changes
+  // Set loading state when currentVersion changes
   useEffect(() => {
     if (currentVersion) {
       setImageLoading(true)
       setImageLoadError(false)
       setError(null)
+      
+      if (imgRef.current && imgRef.current.complete) {
+        setImageLoading(false)
+      }
     }
   }, [currentVersion, setError])
-
-  // Set initial loading state
-  useEffect(() => {
-    if (currentVersion && !imageDimensions) {
-      setImageLoading(true)
-      setImageLoadError(false)
-      setError(null)
-    }
-  }, [currentVersion, imageDimensions, setError])
-
-  // Auto-retry if image fails to load after a delay
-  useEffect(() => {
-    if (imageLoadError && currentVersion) {
-      const retryTimer = setTimeout(() => {
-        console.log('Auto-retrying image load after error')
-        retryImageLoad()
-      }, 5000) // 5 second delay before auto-retry
-      
-      return () => clearTimeout(retryTimer)
-    }
-  }, [imageLoadError, currentVersion, retryImageLoad])
 
   // Handle aspect ratio change
   const handleAspectRatioChange = useCallback((preset: typeof aspectRatioPresets[0]) => {
@@ -171,7 +141,6 @@ export default function CropEditPage() {
     if (!imageDimensions) return
 
     if (preset.name === 'Original') {
-      // Restore full image selection
       const fullCrop: CropType = {
         unit: '%',
         width: 100,
@@ -184,24 +153,19 @@ export default function CropEditPage() {
     }
 
     if (preset.name === 'Free') {
-      // Remove aspect ratio constraint
-      setCrop(prev => {
-        if (!prev) return prev
-        // Create a new crop object without aspect ratio constraint
-        return {
-          ...prev,
-          unit: prev.unit,
-          width: prev.width,
-          height: prev.height,
-          x: prev.x,
-          y: prev.y
-        }
-      })
+      // For Free mode, completely reset the crop to remove any aspect ratio constraints
+      const freeCrop: CropType = {
+        unit: '%',
+        width: 60,
+        height: 60,
+        x: 20,
+        y: 20,
+      }
+      setCrop(freeCrop)
       return
     }
 
     if (preset.ratio) {
-      // Create new crop with selected aspect ratio
       const newCrop = centerCrop(
         makeAspectCrop(
           {
@@ -220,42 +184,33 @@ export default function CropEditPage() {
     }
   }, [imageDimensions])
 
-  // Handle crop change (fires continuously)
+  // Handle crop change
   const handleCropChange = useCallback((newCrop: CropType) => {
     setCrop(newCrop)
     
-    // Only mark as changed if we have valid dimensions
     if (newCrop && newCrop.width > 0 && newCrop.height > 0) {
       setHasCropChanged(true)
-    }
-    
-    // Debug logging
-    if (newCrop) {
-      console.log('Crop changed:', {
-        x: newCrop.x,
-        y: newCrop.y,
-        width: newCrop.width,
-        height: newCrop.height,
-        unit: newCrop.unit
-      })
     }
   }, [])
 
   // Handle crop completion
   const handleCropComplete = useCallback((crop: PixelCrop) => {
-    // This fires when the user finishes dragging
-    console.log('Crop completed:', crop)
-    
-    // Ensure we have valid pixel coordinates
     if (crop.width > 0 && crop.height > 0) {
       setHasCropChanged(true)
+      
+      setCrop({
+        unit: '%',
+        x: crop.x,
+        y: crop.y,
+        width: crop.width,
+        height: crop.height
+      })
     }
   }, [])
 
   // Apply crop
   const handleApplyCrop = async () => {
     if (!crop || !currentVersion || !imageDimensions) {
-      console.log('Cannot apply crop:', { crop: !!crop, currentVersion: !!currentVersion, imageDimensions: !!imageDimensions })
       setError('Please wait for the image to load completely before cropping.')
       return
     }
@@ -265,22 +220,25 @@ export default function CropEditPage() {
       setProcessing(true)
       setError(null)
 
-      // Ensure we have valid crop coordinates
       if (crop.width <= 0 || crop.height <= 0) {
         setError('Invalid crop area. Please adjust the crop selection.')
         return
       }
 
-      console.log('Applying crop with:', { crop, imageDimensions })
+      const cropData = {
+        x: crop.x,
+        y: crop.y,
+        width: crop.width,
+        height: crop.height,
+        unit: crop.unit || 'px'
+      }
 
-      // Actually crop the image using canvas
       const croppedImageUrl = await cropImage(
         currentVersion.imageUrl,
-        crop,
+        cropData,
         imageDimensions
       )
       
-      console.log('Crop successful, new URL:', croppedImageUrl)
       setCroppedImageUrl(croppedImageUrl)
     } catch (error) {
       console.error('Crop error:', error)
@@ -297,7 +255,6 @@ export default function CropEditPage() {
 
   // Cancel crop
   const handleCancelCrop = () => {
-    console.log('Canceling crop, restoring initial crop:', initialCrop)
     if (initialCrop) {
       setCrop(initialCrop)
     }
@@ -306,27 +263,18 @@ export default function CropEditPage() {
     setSelectedAspectRatio('Free')
   }
 
-  // Reset crop - restore original image and reset crop area
+  // Reset crop
   const handleResetCrop = () => {
-    // Clear the cropped image to show the original
     setCroppedImageUrl(null)
     
-    // Reset to initial crop settings
     if (imgRef.current && imageDimensions) {
-      const resetCrop = centerCrop(
-        makeAspectCrop(
-          {
-            unit: '%',
-            width: 80,
-            height: 80,
-          },
-          16 / 9,
-          imageDimensions.width,
-          imageDimensions.height
-        ),
-        imageDimensions.width,
-        imageDimensions.height
-      )
+      const resetCrop: CropType = {
+        unit: '%',
+        width: 60,
+        height: 60,
+        x: 20,
+        y: 20,
+      }
       setCrop(resetCrop)
       setSelectedAspectRatio('Free')
       setHasCropChanged(false)
@@ -335,7 +283,6 @@ export default function CropEditPage() {
 
   const handleNext = async () => {
     if (croppedImageUrl) {
-      // Save the cropped image as a new version
       await addVersion({
         type: 'crop',
         imageUrl: croppedImageUrl,
@@ -350,7 +297,6 @@ export default function CropEditPage() {
       })
     }
     
-    // Navigate to next step
     router.push('/edit/meta')
   }
 
@@ -385,7 +331,6 @@ export default function CropEditPage() {
     )
   }
 
-  // Always render the main component structure, even if image is loading
   const displayImageUrl = croppedImageUrl || currentVersion.imageUrl
   const canApplyCrop = crop && hasCropChanged && !isCropping && !croppedImageUrl
   
@@ -457,36 +402,6 @@ export default function CropEditPage() {
 
         {/* Image Crop Area */}
         <div className="mb-6">
-          {/* Crop Info */}
-          {crop && crop.width > 0 && crop.height > 0 && (
-            <div className="mb-3 p-2 bg-gray-50 rounded border text-sm text-gray-600">
-              <span className="font-medium">Crop Area:</span> {Math.round(crop.width)} × {Math.round(crop.height)} pixels
-              {crop.x !== undefined && crop.y !== undefined && (
-                <span className="ml-4">
-                  Position: ({Math.round(crop.x)}, {Math.round(crop.y)})
-                </span>
-              )}
-            </div>
-          )}
-          
-          {/* Debug Info */}
-          {process.env.NODE_ENV === 'development' && currentVersion && (
-            <div className="mb-3 p-2 bg-blue-50 rounded border text-xs text-blue-600">
-              <span className="font-medium">Debug:</span> Image URL: {currentVersion.imageUrl.substring(0, 50)}...
-              <br />
-              <span className="font-medium">Status:</span> {imageLoading ? 'Loading' : imageLoadError ? 'Error' : 'Loaded'}
-              {imageDimensions && (
-                <span className="ml-4">
-                  <span className="font-medium">Dimensions:</span> {imageDimensions.width} × {imageDimensions.height}
-                </span>
-              )}
-              <br />
-              <span className="font-medium">URL Type:</span> {currentVersion.imageUrl.startsWith('blob:') ? 'Blob' : currentVersion.imageUrl.startsWith('data:') ? 'Data URL' : 'External URL'}
-              <br />
-              <span className="font-medium">Crop State:</span> {crop && crop.width && crop.height ? `Active (${Math.round(crop.width)}×${Math.round(crop.height)})` : 'None'}
-            </div>
-          )}
-          
           <div className="relative rounded-lg overflow-hidden bg-gray-100 min-h-96 flex items-center justify-center">
             {!croppedImageUrl ? (
               <>
@@ -508,12 +423,6 @@ export default function CropEditPage() {
                       >
                         Skip Crop & Continue
                       </button>
-                    </div>
-                    <div className="mt-4 text-xs text-gray-400">
-                      <p>If the image doesn't load, you can:</p>
-                      <p>• Wait a few more seconds</p>
-                      <p>• Click "Reload Image" to try again</p>
-                      <p>• Click "Skip Crop & Continue" to proceed</p>
                     </div>
                   </div>
                 )}
@@ -547,30 +456,37 @@ export default function CropEditPage() {
                 
                 {!imageLoading && !imageLoadError && (
                   <ReactCrop
+                    key={`crop-${selectedAspectRatio}`}
                     crop={crop}
                     onChange={handleCropChange}
                     onComplete={handleCropComplete}
-                    aspect={aspectRatioPresets.find(p => p.name === selectedAspectRatio)?.ratio || undefined}
+                    aspect={selectedAspectRatio === 'Free' ? undefined : aspectRatioPresets.find(p => p.name === selectedAspectRatio)?.ratio || undefined}
                     minWidth={50}
                     minHeight={50}
                     keepSelection
                     ruleOfThirds
+                    className="crop-container"
                   >
                     <img
                       ref={imgRef}
-                      src={currentVersion.imageUrl.startsWith('blob:') || currentVersion.imageUrl.startsWith('data:') ? currentVersion.imageUrl : getProxiedImageUrl(currentVersion.imageUrl)}
+                      src={currentVersion.imageUrl}
                       alt="Crop preview"
-                      className="max-h-96 w-auto mx-auto"
-                      style={{ maxWidth: '100%' }}
+                      className="max-h-96 w-auto mx-auto transition-opacity duration-300"
+                      style={{ 
+                        maxWidth: '100%',
+                        opacity: imageLoading ? 0.7 : 1
+                      }}
                       onLoad={onImageLoad}
                       onError={onImageError}
                       crossOrigin="anonymous"
                       loading="eager"
+                      decoding="async"
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      importance="high"
                     />
                   </ReactCrop>
                 )}
 
-                {/* Fallback: Always show something if image is having issues */}
                 {imageLoading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
                     <div className="text-center">
@@ -649,7 +565,6 @@ export default function CropEditPage() {
                   Cancel
                 </button>
 
-                {/* Skip Crop Button - Always available */}
                 <button
                   onClick={() => router.push('/edit/meta')}
                   className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
@@ -667,29 +582,6 @@ export default function CropEditPage() {
             Next Step
             <ArrowRight size={20} className="ml-2" />
           </button>
-        </div>
-
-        {/* Instructions */}
-        <div className="mt-8 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-          <h3 className="text-sm font-medium text-yellow-900 mb-2">How to Crop</h3>
-          <ul className="text-sm text-yellow-800 space-y-1">
-            <li>• <strong>Drag handles:</strong> Click and drag any corner or edge handle to resize</li>
-            <li>• <strong>Move crop area:</strong> Click and drag inside the crop rectangle to move it</li>
-            <li>• <strong>Aspect ratio:</strong> Select a preset to maintain that ratio while resizing</li>
-            <li>• <strong>Free mode:</strong> Select "Free" to resize without aspect ratio constraints</li>
-            <li>• <strong>Original:</strong> Select "Original" to restore full image selection</li>
-            <li>• <strong>Reset:</strong> Click "Reset" to return to default crop settings</li>
-          </ul>
-          
-          <div className="mt-4 pt-4 border-t border-yellow-200">
-            <h4 className="text-sm font-medium text-yellow-900 mb-2">Troubleshooting</h4>
-            <ul className="text-sm text-yellow-800 space-y-1">
-              <li>• <strong>Image not loading?</strong> Try the "Reload Image" button or skip to the next step</li>
-              <li>• <strong>Crop not working?</strong> Ensure the image is fully loaded before cropping</li>
-              <li>• <strong>Want to skip?</strong> Use "Skip Crop" to continue without cropping</li>
-              <li>• <strong>Need help?</strong> Check the debug info above for technical details</li>
-            </ul>
-          </div>
         </div>
       </div>
     </EditorLayout>

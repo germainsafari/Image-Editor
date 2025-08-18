@@ -458,7 +458,7 @@ export function downloadImage(imageUrl: string, filename: string) {
  */
 export function cropImage(
   imageUrl: string,
-  crop: { x: number; y: number; width: number; height: number },
+  crop: { x: number; y: number; width: number; height: number; unit?: string },
   imageDimensions: { width: number; height: number }
 ): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -474,13 +474,25 @@ export function cropImage(
     img.crossOrigin = 'anonymous'
     
     img.onload = () => {
-      // ReactCrop provides pixel coordinates, not percentages
-      // The crop object already contains the correct pixel values
-      const pixelCrop = {
-        x: Math.round(crop.x),
-        y: Math.round(crop.y),
-        width: Math.round(crop.width),
-        height: Math.round(crop.height)
+      let pixelCrop: { x: number; y: number; width: number; height: number }
+      
+      // Handle both percentage and pixel coordinates
+      if (crop.unit === '%') {
+        // Convert percentage to pixels
+        pixelCrop = {
+          x: Math.round((crop.x / 100) * img.naturalWidth),
+          y: Math.round((crop.y / 100) * img.naturalHeight),
+          width: Math.round((crop.width / 100) * img.naturalWidth),
+          height: Math.round((crop.height / 100) * img.naturalHeight)
+        }
+      } else {
+        // Already in pixels, but ensure they're within bounds
+        pixelCrop = {
+          x: Math.round(crop.x),
+          y: Math.round(crop.y),
+          width: Math.round(crop.width),
+          height: Math.round(crop.height)
+        }
       }
 
       // Validate crop dimensions
@@ -489,12 +501,18 @@ export function cropImage(
         return
       }
 
-      if (pixelCrop.x < 0 || pixelCrop.y < 0 || 
-          pixelCrop.x + pixelCrop.width > img.naturalWidth || 
-          pixelCrop.y + pixelCrop.height > img.naturalHeight) {
-        reject(new Error('Crop area extends beyond image boundaries'))
-        return
-      }
+      // Ensure crop area is within image boundaries
+      pixelCrop.x = Math.max(0, Math.min(pixelCrop.x, img.naturalWidth - pixelCrop.width))
+      pixelCrop.y = Math.max(0, Math.min(pixelCrop.y, img.naturalHeight - pixelCrop.height))
+      pixelCrop.width = Math.min(pixelCrop.width, img.naturalWidth - pixelCrop.x)
+      pixelCrop.height = Math.min(pixelCrop.height, img.naturalHeight - pixelCrop.y)
+
+      console.log('Crop operation:', {
+        originalCrop: crop,
+        pixelCrop,
+        imageNaturalSize: { width: img.naturalWidth, height: img.naturalHeight },
+        canvasSize: { width: pixelCrop.width, height: pixelCrop.height }
+      })
 
       // Set canvas size to crop dimensions
       canvas.width = pixelCrop.width
@@ -521,6 +539,7 @@ export function cropImage(
       canvas.toBlob((blob) => {
         if (blob) {
           const croppedImageUrl = URL.createObjectURL(blob)
+          console.log('Crop successful, created blob URL:', croppedImageUrl)
           resolve(croppedImageUrl)
         } else {
           reject(new Error('Failed to create cropped image'))
@@ -533,8 +552,20 @@ export function cropImage(
       reject(new Error('Failed to load image for cropping. This may be due to CORS restrictions.'))
     }
 
-    // Use proxied URL if it's an external image
-    const finalImageUrl = getProxiedImageUrl(imageUrl)
+    // For Azure URLs, we need to handle them differently
+    let finalImageUrl = imageUrl
+    
+    // If it's an Azure blob URL, try to use it directly first
+    if (imageUrl.includes('blob.core.windows.net')) {
+      finalImageUrl = imageUrl
+    } else if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
+      // Keep blob and data URLs as is
+      finalImageUrl = imageUrl
+    } else {
+      // Use proxied URL for other external images
+      finalImageUrl = getProxiedImageUrl(imageUrl)
+    }
+    
     img.src = finalImageUrl
   })
 } 

@@ -45,3 +45,76 @@ a {
     --background-end-rgb: 0, 0, 0;
   }
 } 
+
+/* Add custom styles for the crop functionality */
+.crop-container {
+  position: relative;
+  display: inline-block;
+}
+
+.crop-container img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Improve ReactCrop styling */
+.ReactCrop {
+  position: relative;
+  display: inline-block;
+  cursor: crosshair;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.ReactCrop__crop-selection {
+  border: 2px solid #3b82f6;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
+}
+
+.ReactCrop__drag-handle {
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  position: absolute;
+  cursor: pointer;
+}
+
+.ReactCrop__drag-handle:hover {
+  background: #2563eb;
+  transform: scale(1.2);
+}
+
+/* Loading states */
+.image-loading {
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.image-loaded {
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+/* Crop info styling */
+.crop-info {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .ReactCrop__drag-handle {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .crop-container img {
+    max-height: 60vh;
+  }
+} 

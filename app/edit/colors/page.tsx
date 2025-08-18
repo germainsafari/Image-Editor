@@ -111,8 +111,8 @@ export default function ColorsEditPage() {
       img.crossOrigin = 'anonymous'
       
       img.onload = () => {
-        canvas.width = img.width
-        canvas.height = img.height
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
         
         // Apply the filter using CSS-like transformations
         ctx.filter = FILTERS[filterValue as keyof typeof FILTERS] || 'none'
@@ -134,8 +134,20 @@ export default function ColorsEditPage() {
         reject(new Error('Failed to load image for filtering. This may be due to CORS restrictions.'))
       }
       
-      // Use proxied URL if it's an external image
-      const finalImageUrl = getProxiedImageUrl(imageUrl)
+      // Handle different URL types properly
+      let finalImageUrl = imageUrl
+      
+      // If it's an Azure blob URL, try to use it directly first
+      if (imageUrl.includes('blob.core.windows.net')) {
+        finalImageUrl = imageUrl
+      } else if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
+        // Keep blob and data URLs as is
+        finalImageUrl = imageUrl
+      } else {
+        // Use proxied URL for other external images
+        finalImageUrl = getProxiedImageUrl(imageUrl)
+      }
+      
       img.src = finalImageUrl
     })
   }
