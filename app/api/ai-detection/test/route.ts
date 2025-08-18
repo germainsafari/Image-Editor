@@ -1,58 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
+import FormData from 'form-data'
 
 export async function GET(request: NextRequest) {
   try {
     const results = {
-      hive: { configured: false, status: 'Not configured' },
       sightengine: { configured: false, status: 'Not configured' },
       local: { configured: true, status: 'Available' }
     }
 
-    // Check Hive AI configuration
-    if (process.env.HIVE_AI_API_KEY) {
+    // Check Sightengine configuration
+    if (process.env.SIGHTENGINE_API_KEY && process.env.SIGHTENGINE_API_USER) {
       try {
-        // Test with a small sample image
-        const testResponse = await fetch('https://api.thehive.ai/api/v2/classify', {
+        // Test with a larger sample image (8x8 pixels) using direct upload
+        const testImageBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAACXBIWXMAAAsTAAALEwEAmpwYAAABWWlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNS40LjAiPgogICA8cmRmOlJERiB4bWxuczpypmY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczp0aWZmPSJodHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyI+CiAgICAgICAgIDx0aWZmOk9yaWVudGF0aW9uPjE8L3RpZmY6T3JpZW50YXRpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgo8P3hwYWNrZXQgZW5kPSJyIj8+', 'base64')
+        
+        // Create form data using the form-data package
+        const form = new FormData()
+        form.append('media', testImageBuffer, {
+          filename: 'test.jpg',
+          contentType: 'image/jpeg'
+        })
+        form.append('models', 'genai')
+        form.append('api_user', process.env.SIGHTENGINE_API_USER)
+        form.append('api_secret', process.env.SIGHTENGINE_API_KEY)
+
+        const testResponse = await fetch('https://api.sightengine.com/1.0/check.json', {
           method: 'POST',
           headers: {
-            'Authorization': `Token ${process.env.HIVE_AI_API_KEY}`,
-            'Content-Type': 'application/json',
+            ...form.getHeaders()
           },
-          body: JSON.stringify({
-            image: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', // 1x1 pixel
-            models: ['ai-generated-content']
-          })
+          body: form.getBuffer()
         })
 
         if (testResponse.ok) {
-          results.hive = { configured: true, status: 'Working' }
+          results.sightengine = { configured: true, status: 'Working' }
         } else {
-          results.hive = { configured: true, status: `API Error: ${testResponse.status}` }
+          const errorText = await testResponse.text()
+          results.sightengine = { configured: true, status: `API Error: ${testResponse.status} - ${errorText}` }
         }
       } catch (error) {
-        results.hive = { configured: true, status: 'Connection failed' }
+        results.sightengine = { configured: true, status: 'Connection failed' }
       }
-    }
-
-    // Check Sightengine configuration
-    if (process.env.SIGHTENGINE_API_KEY) {
-      try {
-        const [apiUser, apiSecret] = process.env.SIGHTENGINE_API_KEY.split(':')
-        if (apiUser && apiSecret) {
-          results.sightengine = { configured: true, status: 'Configured' }
-        } else {
-          results.sightengine = { configured: true, status: 'Invalid format (should be user:secret)' }
-        }
-      } catch (error) {
-        results.sightengine = { configured: true, status: 'Configuration error' }
-      }
+    } else if (process.env.SIGHTENGINE_API_KEY || process.env.SIGHTENGINE_API_USER) {
+      results.sightengine = { configured: false, status: 'Missing API key or user' }
     }
 
     return NextResponse.json({
       success: true,
       services: results,
       summary: {
-        totalServices: 3,
+        totalServices: 2,
         configuredServices: Object.values(results).filter(r => r.configured).length,
         workingServices: Object.values(results).filter(r => r.status === 'Working' || r.status === 'Available').length
       }

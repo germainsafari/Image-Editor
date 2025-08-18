@@ -133,6 +133,20 @@ export default function CropEditPage() {
     }
   }, [currentVersion, setError])
 
+  // Safety check to ensure crop area is always visible in Free mode
+  useEffect(() => {
+    if (selectedAspectRatio === 'Free' && (!crop || crop.width <= 0 || crop.height <= 0)) {
+      const safetyCrop: CropType = {
+        unit: '%',
+        width: 60,
+        height: 60,
+        x: 20,
+        y: 20,
+      }
+      setCrop(safetyCrop)
+    }
+  }, [selectedAspectRatio, crop])
+
   // Handle aspect ratio change
   const handleAspectRatioChange = useCallback((preset: typeof aspectRatioPresets[0]) => {
     setSelectedAspectRatio(preset.name)
@@ -153,14 +167,30 @@ export default function CropEditPage() {
     }
 
     if (preset.name === 'Free') {
-      // For Free mode, completely reset the crop to remove any aspect ratio constraints
-      const freeCrop: CropType = {
-        unit: '%',
-        width: 60,
-        height: 60,
-        x: 20,
-        y: 20,
+      // For Free mode, ensure we always have a valid crop area
+      // Use current crop if it exists, otherwise create a new one
+      let freeCrop: CropType
+      
+      if (crop && crop.width > 0 && crop.height > 0) {
+        // Keep the current crop area but ensure it's not constrained
+        freeCrop = {
+          unit: '%',
+          width: crop.width,
+          height: crop.height,
+          x: crop.x || 20,
+          y: crop.y || 20,
+        }
+      } else {
+        // Create a new crop area if none exists
+        freeCrop = {
+          unit: '%',
+          width: 60,
+          height: 60,
+          x: 20,
+          y: 20,
+        }
       }
+      
       setCrop(freeCrop)
       return
     }
@@ -182,7 +212,7 @@ export default function CropEditPage() {
       )
       setCrop(newCrop)
     }
-  }, [imageDimensions])
+  }, [imageDimensions, crop])
 
   // Handle crop change
   const handleCropChange = useCallback((newCrop: CropType) => {
@@ -191,22 +221,52 @@ export default function CropEditPage() {
     if (newCrop && newCrop.width > 0 && newCrop.height > 0) {
       setHasCropChanged(true)
     }
-  }, [])
+    
+    // Debug log to track crop state
+    console.log('Crop change:', {
+      newCrop,
+      selectedAspectRatio,
+      hasValidCrop: newCrop && newCrop.width > 0 && newCrop.height > 0
+    })
+  }, [selectedAspectRatio])
 
   // Handle crop completion
   const handleCropComplete = useCallback((crop: PixelCrop) => {
     if (crop.width > 0 && crop.height > 0) {
       setHasCropChanged(true)
       
-      setCrop({
+      // Ensure we maintain the crop state properly
+      const updatedCrop: CropType = {
         unit: '%',
         x: crop.x,
         y: crop.y,
         width: crop.width,
         height: crop.height
-      })
+      }
+      
+      setCrop(updatedCrop)
+      
+      // Force a small delay to ensure state is updated before any re-renders
+      setTimeout(() => {
+        if (selectedAspectRatio === 'Free') {
+          // Double-check that Free mode crop is still visible
+          setCrop(prevCrop => {
+            if (prevCrop && prevCrop.width > 0 && prevCrop.height > 0) {
+              return prevCrop
+            }
+            // If crop disappeared, restore it
+            return {
+              unit: '%',
+              width: 60,
+              height: 60,
+              x: 20,
+              y: 20,
+            }
+          })
+        }
+      }, 100)
     }
-  }, [])
+  }, [selectedAspectRatio])
 
   // Apply crop
   const handleApplyCrop = async () => {
@@ -456,7 +516,7 @@ export default function CropEditPage() {
                 
                 {!imageLoading && !imageLoadError && (
                   <ReactCrop
-                    key={`crop-${selectedAspectRatio}`}
+                    key={`crop-${selectedAspectRatio}-${crop?.width || 0}-${crop?.height || 0}`}
                     crop={crop}
                     onChange={handleCropChange}
                     onComplete={handleCropComplete}

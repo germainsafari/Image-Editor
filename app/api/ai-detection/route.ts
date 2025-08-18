@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import FormData from 'form-data'
 
-// AI Detection API using multiple services for high accuracy
+// AI Detection API using Sightengine service for now
 export async function POST(request: NextRequest) {
   try {
     const { image } = await request.json()
@@ -12,14 +13,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use multiple detection methods for higher accuracy
+    // Use Sightengine detection and local analysis for now
     const results = await Promise.allSettled([
-      detectWithHiveAI(image),
       detectWithSightengine(image),
       detectWithLocalAnalysis(image)
     ])
 
-    // Aggregate results from all services
+    // Aggregate results from available services
     const aggregatedResult = aggregateDetectionResults(results)
     
     return NextResponse.json(aggregatedResult)
@@ -32,74 +32,47 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Hive AI Detection (high accuracy service)
-async function detectWithHiveAI(imageBase64: string) {
-  const apiKey = process.env.HIVE_AI_API_KEY
-  
-  if (!apiKey) {
-    throw new Error('Hive AI API key not configured')
-  }
-
-  try {
-    const response = await fetch('https://api.thehive.ai/api/v2/classify', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image: imageBase64,
-        models: ['ai-generated-content']
-      })
-    })
-
-    if (!response.ok) {
-      throw new Error(`Hive AI API error: ${response.status}`)
-    }
-
-    const result = await response.json()
-    const aiScore = result.status[0].response.classifications[0].score
-    
-    return {
-      service: 'hive',
-      isAI: aiScore > 0.5,
-      confidence: aiScore,
-      details: result
-    }
-  } catch (error) {
-    console.error('Hive AI detection error:', error)
-    throw error
-  }
-}
-
-// Sightengine Detection (alternative service)
+// Sightengine Detection (primary service)
 async function detectWithSightengine(imageBase64: string) {
   const apiKey = process.env.SIGHTENGINE_API_KEY
+  const apiUser = process.env.SIGHTENGINE_API_USER
   
-  if (!apiKey) {
-    throw new Error('Sightengine API key not configured')
+  if (!apiKey || !apiUser) {
+    throw new Error('Sightengine API credentials not configured')
   }
 
   try {
+    // Convert base64 to buffer for direct upload
+    const imageBuffer = Buffer.from(imageBase64, 'base64')
+    
+    // Create form data using the form-data package
+    const form = new FormData()
+    form.append('media', imageBuffer, {
+      filename: 'image.jpg',
+      contentType: 'image/jpeg'
+    })
+    form.append('models', 'genai')
+    form.append('api_user', apiUser)
+    form.append('api_secret', apiKey)
+
     const response = await fetch('https://api.sightengine.com/1.0/check.json', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        ...form.getHeaders()
       },
-      body: new URLSearchParams({
-        url: `data:image/jpeg;base64,${imageBase64}`,
-        models: 'ai-generated',
-        api_user: apiKey.split(':')[0],
-        api_secret: apiKey.split(':')[1]
-      })
+      body: form.getBuffer()
     })
 
     if (!response.ok) {
-      throw new Error(`Sightengine API error: ${response.status}`)
+      const errorText = await response.text()
+      console.error('Sightengine API response:', response.status, errorText)
+      throw new Error(`Sightengine API error: ${response.status} - ${errorText}`)
     }
 
     const result = await response.json()
-    const aiScore = result.ai_generated?.score || 0
+    console.log('Sightengine API result:', result)
+    
+    const aiScore = result.type?.ai_generated || 0
     
     return {
       service: 'sightengine',
@@ -194,7 +167,7 @@ async function analyzeImageBuffer(buffer: Buffer) {
   }
 }
 
-// Aggregate results from multiple detection services
+// Aggregate results from available detection services
 function aggregateDetectionResults(results: PromiseSettledResult<any>[]) {
   const validResults = results
     .filter(result => result.status === 'fulfilled')
@@ -211,9 +184,8 @@ function aggregateDetectionResults(results: PromiseSettledResult<any>[]) {
   
   // Weight the results based on service reliability
   const weights = {
-    hive: 0.5,      // Most reliable
-    sightengine: 0.3, // Good reliability
-    local: 0.2       // Fallback
+    sightengine: 0.8, // Primary service
+    local: 0.2        // Fallback
   }
   
   let weightedSum = 0
