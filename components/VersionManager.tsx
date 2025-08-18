@@ -11,11 +11,12 @@ interface VersionManagerProps {
 }
 
 export default function VersionManager({ className }: VersionManagerProps) {
-  const { getVersionHistory, getCurrentVersion, setCurrentVersion, deleteVersion } = useImageStore()
+  const { getCurrentVersionHistory, getCurrentVersion, setCurrentVersion, deleteVersion } = useImageStore()
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState<string | null>(null)
   
-  const versions = getVersionHistory()
+  // Only show versions that belong to the currently edited image chain
+  const versions = getCurrentVersionHistory()
   const currentVersion = getCurrentVersion()
 
   const handleVersionSelect = (versionId: string) => {
@@ -69,7 +70,8 @@ export default function VersionManager({ className }: VersionManagerProps) {
     return (
       <div className={cn("bg-white rounded-lg shadow-sm p-6", className)}>
         <h3 className="text-lg font-medium text-gray-900 mb-4">Versions</h3>
-        <p className="text-sm text-gray-500">No versions yet. Upload an image to get started.</p>
+        <p className="text-sm text-gray-500">No versions yet for this image. Upload or pick an image to start editing.</p>
+        <a href="/gallery" className="inline-block mt-3 text-sm text-abb-red hover:underline">Open gallery ↗</a>
       </div>
     )
   }
@@ -151,14 +153,11 @@ export default function VersionManager({ className }: VersionManagerProps) {
         ))}
       </div>
 
-      {/* Storage Info */}
+      {/* Footer */}
       <div className="mt-4 pt-4 border-t border-gray-200">
         <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>Total versions: {versions.length}</span>
-          <div className="flex items-center gap-1">
-            <Cloud size={12} />
-            <span>Azure Storage</span>
-          </div>
+          <span>Versions for this image: {versions.length}</span>
+          <a href="/gallery" className="text-abb-red hover:underline">See all images</a>
         </div>
       </div>
     </div>

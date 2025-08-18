@@ -42,8 +42,10 @@ export default function GalleryPage() {
   }
 
   const handleReuse = (version: any) => {
-    // Set this version as current and navigate to edit flow
-    useImageStore.getState().setCurrentVersion(version.id)
+    // Set this version as the current editing target and start a new branch from it
+    const store = useImageStore.getState()
+    store.setCurrentVersion(version.id)
+    store.setBranchRoot(version.id)
     router.push('/edit/context')
   }
 

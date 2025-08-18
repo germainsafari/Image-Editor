@@ -39,15 +39,20 @@ interface ImageEditorState {
   isProcessing: boolean
   error: string | null
   isHydrated: boolean // Track if store has been hydrated from localStorage
+  branchRootId?: string | null
   
   // Actions
   addVersion: (version: Omit<ImageVersion, 'id' | 'timestamp'>) => Promise<void>
   setCurrentVersion: (versionId: string) => void
+  setBranchRoot: (versionId: string | null) => void
   setProcessing: (processing: boolean) => void
   setError: (error: string | null) => void
   clearVersions: () => void
   getCurrentVersion: () => ImageVersion | null
   getVersionHistory: () => ImageVersion[]
+  // New: versioning scoped to the currently edited image chain
+  getCurrentVersionHistory: () => ImageVersion[]
+  getCurrentRootId: () => string | null
   loadVersionFromAzure: (versionId: string) => Promise<ImageVersion | null>
   deleteVersion: (versionId: string) => Promise<void>
   setHydrated: (hydrated: boolean) => void
@@ -61,6 +66,7 @@ export const useImageStore = create<ImageEditorState>()(
       isProcessing: false,
       error: null,
       isHydrated: false,
+      branchRootId: null,
 
       addVersion: async (version) => {
         try {
@@ -146,6 +152,10 @@ export const useImageStore = create<ImageEditorState>()(
         set({ currentVersion: versionId })
       },
 
+      setBranchRoot: (versionId) => {
+        set({ branchRootId: versionId || null })
+      },
+
       setProcessing: (processing) => {
         set({ isProcessing: processing })
       },
@@ -155,7 +165,7 @@ export const useImageStore = create<ImageEditorState>()(
       },
 
       clearVersions: () => {
-        set({ versions: [], currentVersion: null, error: null })
+        set({ versions: [], currentVersion: null, error: null, branchRootId: null })
       },
 
       getCurrentVersion: () => {
@@ -165,6 +175,46 @@ export const useImageStore = create<ImageEditorState>()(
 
       getVersionHistory: () => {
         return get().versions
+      },
+
+      // Determine the root (original upload) id for the current editing context
+      getCurrentRootId: () => {
+        const { currentVersion, versions, branchRootId } = get()
+        if (branchRootId) return branchRootId
+        if (!currentVersion) return null
+        const idToVersion = new Map(versions.map(v => [v.id, v]))
+        let node = idToVersion.get(currentVersion)
+        if (!node) return null
+        while (node.parent && idToVersion.get(node.parent)) {
+          node = idToVersion.get(node.parent) as ImageVersion
+        }
+        return node.id
+      },
+
+      // Version history filtered to only the versions that belong to the
+      // same root (initial upload) as the currently edited image.
+      getCurrentVersionHistory: () => {
+        const { versions } = get()
+        const rootId = get().getCurrentRootId()
+        if (!rootId) return []
+
+        const idToVersion = new Map(versions.map(v => [v.id, v]))
+
+        const hasSameRoot = (version: ImageVersion) => {
+          let node: ImageVersion | undefined = version
+          while (node && node.parent && idToVersion.get(node.parent)) {
+            node = idToVersion.get(node.parent) as ImageVersion
+          }
+          return (node ? node.id : version.id) === rootId
+        }
+
+        return versions
+          .filter(v => hasSameRoot(v))
+          .sort((a, b) => {
+            const ta = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime()
+            const tb = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime()
+            return ta - tb
+          })
       },
 
       loadVersionFromAzure: async (versionId: string) => {
@@ -242,6 +292,7 @@ export const useImageStore = create<ImageEditorState>()(
         // Only persist these fields, not the processing/error states
         currentVersion: state.currentVersion,
         versions: state.versions,
+        branchRootId: state.branchRootId,
       }),
       onRehydrateStorage: () => (state) => {
         // Set hydrated to true when rehydration is complete
