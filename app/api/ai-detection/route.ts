@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import FormData from 'form-data'
 
 // AI Detection API using Sightengine service for now
 export async function POST(request: NextRequest) {
@@ -45,22 +44,17 @@ async function detectWithSightengine(imageBase64: string) {
     // Convert base64 to buffer for direct upload
     const imageBuffer = Buffer.from(imageBase64, 'base64')
     
-    // Create form data using the form-data package
+    // Use Web FormData + Blob for multipart upload (compatible with Next.js runtime)
     const form = new FormData()
-    form.append('media', imageBuffer, {
-      filename: 'image.jpg',
-      contentType: 'image/jpeg'
-    })
+    const blob = new Blob([imageBuffer], { type: 'image/jpeg' })
+    form.append('media', blob, 'image.jpg')
     form.append('models', 'genai')
     form.append('api_user', apiUser)
     form.append('api_secret', apiKey)
 
     const response = await fetch('https://api.sightengine.com/1.0/check.json', {
       method: 'POST',
-      headers: {
-        ...form.getHeaders()
-      },
-      body: form.getBuffer()
+      body: form
     })
 
     if (!response.ok) {
