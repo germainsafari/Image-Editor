@@ -542,7 +542,7 @@ export default function CropEditPage() {
                       loading="eager"
                       decoding="async"
                       sizes="(max-width: 768px) 100vw, 50vw"
-                      importance="high"
+                      fetchPriority="high"
                     />
                   </ReactCrop>
                 )}
