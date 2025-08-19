@@ -552,17 +552,14 @@ export function cropImage(
       reject(new Error('Failed to load image for cropping. This may be due to CORS restrictions.'))
     }
 
-    // For Azure URLs, we need to handle them differently
+    // Prefer proxy for any external URL to avoid CORS-tainted canvas
     let finalImageUrl = imageUrl
     
-    // If it's an Azure blob URL, try to use it directly first
-    if (imageUrl.includes('blob.core.windows.net')) {
-      finalImageUrl = imageUrl
-    } else if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
+    if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
       // Keep blob and data URLs as is
       finalImageUrl = imageUrl
     } else {
-      // Use proxied URL for other external images
+      // Use proxied URL for all external images (including Azure blob URLs)
       finalImageUrl = getProxiedImageUrl(imageUrl)
     }
     

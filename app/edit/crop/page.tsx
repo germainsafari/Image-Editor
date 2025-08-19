@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Crop, Check, ArrowRight, RotateCcw } from 'lucide-react'
 import ReactCrop, { Crop as CropType, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop'
-import 'react-image-crop/dist/ReactCrop.css'
+// ReactCrop CSS is imported via app/globals.css custom styles for v11
 import EditorLayout from '@/components/EditorLayout'
 import { useImageStore } from '@/lib/store'
 import { cropImage } from '@/lib/utils'
@@ -37,8 +37,9 @@ export default function CropEditPage() {
 
   // Initialize crop on image load
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    const { width, height } = e.currentTarget
-    setImageDimensions({ width, height })
+    const imgEl = e.currentTarget
+    // Use natural dimensions for accurate cropping calculations
+    setImageDimensions({ width: imgEl.naturalWidth, height: imgEl.naturalHeight })
     setImageLoading(false)
     setImageLoadError(false)
     
@@ -155,14 +156,19 @@ export default function CropEditPage() {
     if (!imageDimensions) return
 
     if (preset.name === 'Original') {
-      const fullCrop: CropType = {
-        unit: '%',
-        width: 100,
-        height: 100,
-        x: 0,
-        y: 0,
-      }
-      setCrop(fullCrop)
+      // Fit to image but respect viewport using centerCrop for stability
+      const full = centerCrop(
+        {
+          unit: '%',
+          width: 100,
+          height: 100,
+          x: 0,
+          y: 0,
+        },
+        imageDimensions.width,
+        imageDimensions.height
+      ) as CropType
+      setCrop(full)
       return
     }
 
@@ -196,77 +202,33 @@ export default function CropEditPage() {
     }
 
     if (preset.ratio) {
-      const newCrop = centerCrop(
-        makeAspectCrop(
-          {
-            unit: '%',
-            width: 80,
-            height: 80,
-          },
-          preset.ratio,
-          imageDimensions.width,
-          imageDimensions.height
-        ),
+      // Use makeAspectCrop + centerCrop to produce a stable centered crop
+      const aspectC = makeAspectCrop(
+        { unit: '%', width: 80, height: 80 },
+        preset.ratio,
         imageDimensions.width,
         imageDimensions.height
       )
-      setCrop(newCrop)
+      const centered = centerCrop(
+        aspectC,
+        imageDimensions.width,
+        imageDimensions.height
+      ) as CropType
+      setCrop(centered)
     }
   }, [imageDimensions, crop])
 
   // Handle crop change
-  const handleCropChange = useCallback((newCrop: CropType) => {
-    setCrop(newCrop)
-    
-    if (newCrop && newCrop.width > 0 && newCrop.height > 0) {
-      setHasCropChanged(true)
-    }
-    
-    // Debug log to track crop state
-    console.log('Crop change:', {
-      newCrop,
-      selectedAspectRatio,
-      hasValidCrop: newCrop && newCrop.width > 0 && newCrop.height > 0
-    })
-  }, [selectedAspectRatio])
+  const handleCropChange = useCallback((nextCrop: CropType) => {
+    // ReactCrop v11 default onChange passes percent crop when 'crop' is percent-based
+    setCrop(nextCrop)
+    if (nextCrop && nextCrop.width && nextCrop.height) setHasCropChanged(true)
+  }, [])
 
   // Handle crop completion
-  const handleCropComplete = useCallback((crop: PixelCrop) => {
-    if (crop.width > 0 && crop.height > 0) {
-      setHasCropChanged(true)
-      
-      // Ensure we maintain the crop state properly
-      const updatedCrop: CropType = {
-        unit: '%',
-        x: crop.x,
-        y: crop.y,
-        width: crop.width,
-        height: crop.height
-      }
-      
-      setCrop(updatedCrop)
-      
-      // Force a small delay to ensure state is updated before any re-renders
-      setTimeout(() => {
-        if (selectedAspectRatio === 'Free') {
-          // Double-check that Free mode crop is still visible
-          setCrop(prevCrop => {
-            if (prevCrop && prevCrop.width > 0 && prevCrop.height > 0) {
-              return prevCrop
-            }
-            // If crop disappeared, restore it
-            return {
-              unit: '%',
-              width: 60,
-              height: 60,
-              x: 20,
-              y: 20,
-            }
-          })
-        }
-      }, 100)
-    }
-  }, [selectedAspectRatio])
+  const handleCropComplete = useCallback((_: PixelCrop, percentCrop: CropType) => {
+    if (percentCrop && percentCrop.width && percentCrop.height) setHasCropChanged(true)
+  }, [])
 
   // Apply crop
   const handleApplyCrop = async () => {
@@ -516,7 +478,7 @@ export default function CropEditPage() {
                 
                 {!imageLoading && !imageLoadError && (
                   <ReactCrop
-                    key={`crop-${selectedAspectRatio}-${crop?.width || 0}-${crop?.height || 0}`}
+                    key={`crop-${selectedAspectRatio}`}
                     crop={crop}
                     onChange={handleCropChange}
                     onComplete={handleCropComplete}
