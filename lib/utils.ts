@@ -507,6 +507,12 @@ export function cropImage(
       pixelCrop.width = Math.min(pixelCrop.width, img.naturalWidth - pixelCrop.x)
       pixelCrop.height = Math.min(pixelCrop.height, img.naturalHeight - pixelCrop.y)
 
+      // Additional validation to ensure we have a valid crop area
+      if (pixelCrop.width <= 0 || pixelCrop.height <= 0) {
+        reject(new Error('Crop area is too small or invalid after boundary adjustment'))
+        return
+      }
+
       console.log('Crop operation:', {
         originalCrop: crop,
         pixelCrop,

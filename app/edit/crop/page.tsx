@@ -35,25 +35,42 @@ export default function CropEditPage() {
   const [imageLoading, setImageLoading] = useState(true)
   const imgRef = useRef<HTMLImageElement>(null)
 
-  // Initialize crop on image load (restore previous behavior)
+  // Initialize crop on image load
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget
     setImageDimensions({ width, height })
     setImageLoading(false)
     setImageLoadError(false)
 
-    // Create initial crop without aspect ratio constraint for better flexibility
-    const initial: CropType = {
-      unit: '%',
-      width: 80,
-      height: 80,
-      x: 10,
-      y: 10
+    // Create initial crop based on current aspect ratio selection
+    let initial: CropType
+    
+    if (selectedAspectRatio === 'Original') {
+      initial = { unit: '%', width: 100, height: 100, x: 0, y: 0 }
+    } else if (selectedAspectRatio === 'Free') {
+      initial = { unit: '%', width: 80, height: 80, x: 10, y: 10 }
+    } else {
+      const preset = aspectRatioPresets.find(p => p.name === selectedAspectRatio)
+      if (preset?.ratio) {
+        initial = centerCrop(
+          makeAspectCrop(
+            { unit: '%', width: 80, height: 80 },
+            preset.ratio,
+            width,
+            height
+          ),
+          width,
+          height
+        ) as CropType
+      } else {
+        initial = { unit: '%', width: 80, height: 80, x: 10, y: 10 }
+      }
     }
+    
     setCrop(initial)
     setInitialCrop(initial)
     setHasCropChanged(false)
-  }, [])
+  }, [selectedAspectRatio])
 
   // Retry loading image
   const retryImageLoad = useCallback(() => {
@@ -101,17 +118,17 @@ export default function CropEditPage() {
         if (imageLoading) {
           setImageLoading(false)
           setImageLoadError(false)
-                     if (!crop && currentVersion) {
-             const basicCrop: CropType = {
-               unit: '%',
-               width: 80,
-               height: 80,
-               x: 10,
-               y: 10,
-             }
-             setCrop(basicCrop)
-             setInitialCrop(basicCrop)
-           }
+          if (!crop && currentVersion) {
+            const basicCrop: CropType = {
+              unit: '%',
+              width: 80,
+              height: 80,
+              x: 10,
+              y: 10,
+            }
+            setCrop(basicCrop)
+            setInitialCrop(basicCrop)
+          }
         }
       }, 5000)
       
@@ -132,20 +149,6 @@ export default function CropEditPage() {
     }
   }, [currentVersion, setError])
 
-  // Safety check to ensure crop area is always visible in Free mode
-  useEffect(() => {
-    if (selectedAspectRatio === 'Free' && (!crop || crop.width <= 0 || crop.height <= 0)) {
-      const safetyCrop: CropType = {
-        unit: '%',
-        width: 80,
-        height: 80,
-        x: 10,
-        y: 10,
-      }
-      setCrop(safetyCrop)
-    }
-  }, [selectedAspectRatio, crop])
-
   // Handle aspect ratio change
   const handleAspectRatioChange = useCallback((preset: typeof aspectRatioPresets[0]) => {
     setSelectedAspectRatio(preset.name)
@@ -153,27 +156,22 @@ export default function CropEditPage() {
 
     if (!imageDimensions) return
 
-    if (preset.name === 'Original') {
-      const full: CropType = { unit: '%', width: 100, height: 100, x: 0, y: 0 }
-      setCrop(full)
-      return
-    }
+    let newCrop: CropType
 
-    if (preset.name === 'Free') {
+    if (preset.name === 'Original') {
+      newCrop = { unit: '%', width: 100, height: 100, x: 0, y: 0 }
+    } else if (preset.name === 'Free') {
       // For free mode, create a centered crop without aspect ratio constraint
-      const newCrop: CropType = {
+      newCrop = {
         unit: '%',
         width: 80,
         height: 80,
         x: 10,
         y: 10
       }
-      setCrop(newCrop)
-      return
-    }
-
-    if (preset.ratio) {
-      const newCrop = centerCrop(
+    } else if (preset.ratio) {
+      // Create a crop with the specified aspect ratio
+      newCrop = centerCrop(
         makeAspectCrop(
           { unit: '%', width: 80, height: 80 },
           preset.ratio,
@@ -183,13 +181,22 @@ export default function CropEditPage() {
         imageDimensions.width,
         imageDimensions.height
       ) as CropType
-      setCrop(newCrop)
+    } else {
+      // Fallback to free mode
+      newCrop = {
+        unit: '%',
+        width: 80,
+        height: 80,
+        x: 10,
+        y: 10
+      }
     }
+
+    setCrop(newCrop)
   }, [imageDimensions])
 
   // Handle crop change
   const handleCropChange = useCallback((nextCrop: CropType) => {
-    // ReactCrop v11 default onChange passes percent crop when 'crop' is percent-based
     if (nextCrop && nextCrop.width > 0 && nextCrop.height > 0) {
       setCrop(nextCrop)
       setHasCropChanged(true)
@@ -294,6 +301,15 @@ export default function CropEditPage() {
     }
     
     router.push('/edit/meta')
+  }
+
+  // Get current aspect ratio for ReactCrop
+  const getCurrentAspectRatio = () => {
+    if (selectedAspectRatio === 'Free' || selectedAspectRatio === 'Original') {
+      return undefined
+    }
+    const preset = aspectRatioPresets.find(p => p.name === selectedAspectRatio)
+    return preset?.ratio || undefined
   }
 
   // Show loading state while store is hydrating
@@ -452,15 +468,15 @@ export default function CropEditPage() {
                 
                 {!imageLoading && !imageLoadError && (
                   <ReactCrop
-                    key={`crop-${selectedAspectRatio}`}
                     crop={crop}
                     onChange={handleCropChange}
                     onComplete={handleCropComplete}
-                    aspect={selectedAspectRatio === 'Free' ? undefined : aspectRatioPresets.find(p => p.name === selectedAspectRatio)?.ratio || undefined}
+                    aspect={getCurrentAspectRatio()}
                     minWidth={50}
                     minHeight={50}
                     keepSelection
                     ruleOfThirds
+                    locked={selectedAspectRatio !== 'Free'}
                   >
                     <img
                       ref={imgRef}
