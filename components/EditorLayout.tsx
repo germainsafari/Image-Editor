@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Download, HelpCircle } from 'lucide-react'
 import { useImageStore } from '@/lib/store'
@@ -14,7 +15,7 @@ interface EditorLayoutProps {
 
 export default function EditorLayout({ children, currentStep }: EditorLayoutProps) {
   const router = useRouter()
-  const { getCurrentVersion } = useImageStore()
+  const { getCurrentVersion, isHydrated } = useImageStore()
   const currentVersion = getCurrentVersion()
 
   const handleDownload = () => {
@@ -27,8 +28,19 @@ export default function EditorLayout({ children, currentStep }: EditorLayoutProp
     router.push(href)
   }
 
+  // Avoid hydration mismatches: wait for store hydration before redirecting
+  useEffect(() => {
+    if (isHydrated && !currentVersion) {
+      router.push('/')
+    }
+  }, [isHydrated, currentVersion, router])
+
+  if (!isHydrated) {
+    // Render a stable placeholder during hydration
+    return <div className="min-h-screen bg-gray-50" />
+  }
+
   if (!currentVersion) {
-    router.push('/')
     return null
   }
 

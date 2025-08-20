@@ -65,6 +65,7 @@ a {
   cursor: crosshair;
   overflow: hidden;
   max-width: 100%;
+  vertical-align: top; /* prevent baseline gap causing grey strip */
 }
 
 .ReactCrop__crop-selection {
@@ -73,6 +74,16 @@ a {
 }
 
 .ReactCrop__drag-handle {
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  position: absolute;
+  cursor: pointer;
+}
+
+.ReactCrop__handle {
   background: #3b82f6;
   border: 2px solid white;
   border-radius: 50%;
@@ -118,3 +129,9 @@ a {
     max-height: 60vh;
   }
 } 
+
+/* Ensure crop wrapper shrinks to image height, avoiding extra background below */
+.crop-container,
+.ReactCrop > img {
+  vertical-align: top;
+}

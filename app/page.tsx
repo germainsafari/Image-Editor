@@ -118,6 +118,11 @@ export default function Home() {
     { name: 'Image description', href: '/edit/meta', icon: ArrowRight },
   ]
 
+  // Avoid hydration mismatches by rendering a stable shell until the store is hydrated
+  if (!isHydrated) {
+    return <div className="min-h-screen bg-gray-50" />
+  }
+
   return (
     <div 
       className="min-h-screen bg-gray-50"

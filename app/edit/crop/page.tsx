@@ -4,10 +4,10 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Crop, Check, ArrowRight, RotateCcw } from 'lucide-react'
 import ReactCrop, { Crop as CropType, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop'
-// ReactCrop CSS is imported via app/globals.css custom styles for v11
+import 'react-image-crop/dist/ReactCrop.css'
 import EditorLayout from '@/components/EditorLayout'
 import { useImageStore } from '@/lib/store'
-import { cropImage } from '@/lib/utils'
+import { cropImage, getProxiedImageUrl } from '@/lib/utils'
 
 const aspectRatioPresets = [
   { name: 'Original', ratio: null, icon: '🖼️' },
@@ -35,25 +35,23 @@ export default function CropEditPage() {
   const [imageLoading, setImageLoading] = useState(true)
   const imgRef = useRef<HTMLImageElement>(null)
 
-  // Initialize crop on image load
+  // Initialize crop on image load (restore previous behavior)
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    const imgEl = e.currentTarget
-    // Use natural dimensions for accurate cropping calculations
-    setImageDimensions({ width: imgEl.naturalWidth, height: imgEl.naturalHeight })
+    const { width, height } = e.currentTarget
+    setImageDimensions({ width, height })
     setImageLoading(false)
     setImageLoadError(false)
-    
-    // Create initial crop (60% of image, centered) - no aspect ratio constraint for Free mode
-    const initialCrop: CropType = {
+
+    // Create initial crop without aspect ratio constraint for better flexibility
+    const initial: CropType = {
       unit: '%',
-      width: 60,
-      height: 60,
-      x: 20,
-      y: 20,
+      width: 80,
+      height: 80,
+      x: 10,
+      y: 10
     }
-    
-    setCrop(initialCrop)
-    setInitialCrop(initialCrop)
+    setCrop(initial)
+    setInitialCrop(initial)
     setHasCropChanged(false)
   }, [])
 
@@ -103,17 +101,17 @@ export default function CropEditPage() {
         if (imageLoading) {
           setImageLoading(false)
           setImageLoadError(false)
-          if (!crop && currentVersion) {
-            const basicCrop: CropType = {
-              unit: '%',
-              width: 60,
-              height: 60,
-              x: 20,
-              y: 20,
-            }
-            setCrop(basicCrop)
-            setInitialCrop(basicCrop)
-          }
+                     if (!crop && currentVersion) {
+             const basicCrop: CropType = {
+               unit: '%',
+               width: 80,
+               height: 80,
+               x: 10,
+               y: 10,
+             }
+             setCrop(basicCrop)
+             setInitialCrop(basicCrop)
+           }
         }
       }, 5000)
       
@@ -139,10 +137,10 @@ export default function CropEditPage() {
     if (selectedAspectRatio === 'Free' && (!crop || crop.width <= 0 || crop.height <= 0)) {
       const safetyCrop: CropType = {
         unit: '%',
-        width: 60,
-        height: 60,
-        x: 20,
-        y: 20,
+        width: 80,
+        height: 80,
+        x: 10,
+        y: 10,
       }
       setCrop(safetyCrop)
     }
@@ -152,82 +150,58 @@ export default function CropEditPage() {
   const handleAspectRatioChange = useCallback((preset: typeof aspectRatioPresets[0]) => {
     setSelectedAspectRatio(preset.name)
     setHasCropChanged(true)
-    
+
     if (!imageDimensions) return
 
     if (preset.name === 'Original') {
-      // Fit to image but respect viewport using centerCrop for stability
-      const full = centerCrop(
-        {
-          unit: '%',
-          width: 100,
-          height: 100,
-          x: 0,
-          y: 0,
-        },
-        imageDimensions.width,
-        imageDimensions.height
-      ) as CropType
+      const full: CropType = { unit: '%', width: 100, height: 100, x: 0, y: 0 }
       setCrop(full)
       return
     }
 
     if (preset.name === 'Free') {
-      // For Free mode, ensure we always have a valid crop area
-      // Use current crop if it exists, otherwise create a new one
-      let freeCrop: CropType
-      
-      if (crop && crop.width > 0 && crop.height > 0) {
-        // Keep the current crop area but ensure it's not constrained
-        freeCrop = {
-          unit: '%',
-          width: crop.width,
-          height: crop.height,
-          x: crop.x || 20,
-          y: crop.y || 20,
-        }
-      } else {
-        // Create a new crop area if none exists
-        freeCrop = {
-          unit: '%',
-          width: 60,
-          height: 60,
-          x: 20,
-          y: 20,
-        }
+      // For free mode, create a centered crop without aspect ratio constraint
+      const newCrop: CropType = {
+        unit: '%',
+        width: 80,
+        height: 80,
+        x: 10,
+        y: 10
       }
-      
-      setCrop(freeCrop)
+      setCrop(newCrop)
       return
     }
 
     if (preset.ratio) {
-      // Use makeAspectCrop + centerCrop to produce a stable centered crop
-      const aspectC = makeAspectCrop(
-        { unit: '%', width: 80, height: 80 },
-        preset.ratio,
-        imageDimensions.width,
-        imageDimensions.height
-      )
-      const centered = centerCrop(
-        aspectC,
+      const newCrop = centerCrop(
+        makeAspectCrop(
+          { unit: '%', width: 80, height: 80 },
+          preset.ratio,
+          imageDimensions.width,
+          imageDimensions.height
+        ),
         imageDimensions.width,
         imageDimensions.height
       ) as CropType
-      setCrop(centered)
+      setCrop(newCrop)
     }
-  }, [imageDimensions, crop])
+  }, [imageDimensions])
 
   // Handle crop change
   const handleCropChange = useCallback((nextCrop: CropType) => {
     // ReactCrop v11 default onChange passes percent crop when 'crop' is percent-based
-    setCrop(nextCrop)
-    if (nextCrop && nextCrop.width && nextCrop.height) setHasCropChanged(true)
+    if (nextCrop && nextCrop.width > 0 && nextCrop.height > 0) {
+      setCrop(nextCrop)
+      setHasCropChanged(true)
+    }
   }, [])
 
   // Handle crop completion
   const handleCropComplete = useCallback((_: PixelCrop, percentCrop: CropType) => {
-    if (percentCrop && percentCrop.width && percentCrop.height) setHasCropChanged(true)
+    if (percentCrop && percentCrop.width > 0 && percentCrop.height > 0) {
+      setCrop(percentCrop)
+      setHasCropChanged(true)
+    }
   }, [])
 
   // Apply crop
@@ -289,13 +263,13 @@ export default function CropEditPage() {
   const handleResetCrop = () => {
     setCroppedImageUrl(null)
     
-    if (imgRef.current && imageDimensions) {
+    if (imageDimensions) {
       const resetCrop: CropType = {
         unit: '%',
-        width: 60,
-        height: 60,
-        x: 20,
-        y: 20,
+        width: 80,
+        height: 80,
+        x: 10,
+        y: 10,
       }
       setCrop(resetCrop)
       setSelectedAspectRatio('Free')
@@ -424,7 +398,7 @@ export default function CropEditPage() {
 
         {/* Image Crop Area */}
         <div className="mb-6">
-          <div className="relative rounded-lg overflow-hidden bg-gray-100 min-h-96 flex items-center justify-center">
+          <div className="relative rounded-lg overflow-hidden bg-gray-100">
             {!croppedImageUrl ? (
               <>
                 {imageLoading && (
@@ -487,24 +461,15 @@ export default function CropEditPage() {
                     minHeight={50}
                     keepSelection
                     ruleOfThirds
-                    className="crop-container"
                   >
                     <img
                       ref={imgRef}
-                      src={currentVersion.imageUrl}
+                      src={getProxiedImageUrl(currentVersion.imageUrl)}
                       alt="Crop preview"
-                      className="max-h-96 w-auto mx-auto transition-opacity duration-300"
-                      style={{ 
-                        maxWidth: '100%',
-                        opacity: imageLoading ? 0.7 : 1
-                      }}
+                      className="max-h-96 w-auto mx-auto"
+                      style={{ maxWidth: '100%' }}
                       onLoad={onImageLoad}
                       onError={onImageError}
-                      crossOrigin="anonymous"
-                      loading="eager"
-                      decoding="async"
-                      sizes="(max-width: 768px) 100vw, 50vw"
-                      fetchPriority="high"
                     />
                   </ReactCrop>
                 )}
@@ -577,21 +542,6 @@ export default function CropEditPage() {
                       Apply Crop
                     </>
                   )}
-                </button>
-                
-                <button
-                  onClick={handleCancelCrop}
-                  disabled={!hasCropChanged}
-                  className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={() => router.push('/edit/meta')}
-                  className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                >
-                  Skip Crop
                 </button>
               </>
             )}
